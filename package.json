@@ -1,0 +1,26 @@
+{
+  "name": "studyreel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "StudyReel - a study-gated streaming platform where IT coursework unlocks timed movie access.",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c cyan,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm --workspace server run dev",
+    "dev:client": "npm --workspace client run dev",
+    "build": "npm --workspace server run build && npm --workspace client run build",
+    "start": "npm --workspace server run start",
+    "seed": "npm --workspace server run seed",
+    "typecheck": "npm --workspace server run typecheck && npm --workspace client run typecheck",
+    "lint": "npm run typecheck"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20.11"
+  }
+}
