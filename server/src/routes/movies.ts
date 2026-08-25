@@ -28,9 +28,9 @@ const querySchema = z.object({
 moviesRouter.get(
   '/',
   asyncHandler(async (req, res) => {
-    const query = querySchema.parse(req.query);
-    const { movies, sources, fromCache } = await aggregateMovies(query);
-    const decisions = decisionMap(req.user!.id);
+    const filters = querySchema.parse(req.query);
+    const { movies, sources, fromCache } = await aggregateMovies(filters);
+    const decisions = await decisionMap(req.user!.id);
     const personalised = personalise(movies, decisions);
 
     res.json({
@@ -46,11 +46,11 @@ moviesRouter.get(
 
 moviesRouter.get(
   '/list',
-  asyncHandler((req, res) => {
+  asyncHandler(async (req, res) => {
     const { decision } = z
       .object({ decision: z.enum(['WATCH_LATER', 'DECLINED', 'WATCHED']).optional() })
       .parse(req.query);
-    res.json({ items: listDecisions(req.user!.id, decision) });
+    res.json({ items: await listDecisions(req.user!.id, decision) });
   }),
 );
 
@@ -68,13 +68,13 @@ moviesRouter.post(
     const movie = await findMovie(req.params.movieId);
     if (!movie) throw HttpError.notFound('That title is no longer available.');
 
-    res.json(recordDecision(req.user!.id, movie, decision));
+    res.json(await recordDecision(req.user!.id, movie, decision));
   }),
 );
 
 moviesRouter.delete(
   '/:movieId/decision',
-  asyncHandler((req, res) => {
-    res.json(clearDecision(req.user!.id, req.params.movieId));
+  asyncHandler(async (req, res) => {
+    res.json(await clearDecision(req.user!.id, req.params.movieId));
   }),
 );

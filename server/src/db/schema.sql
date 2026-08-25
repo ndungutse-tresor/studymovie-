@@ -1,5 +1,9 @@
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
+-- StudyReel schema (PostgreSQL).
+--
+-- Timestamps are `timestamptz` throughout, so the driver hands back real Date
+-- objects and daylight-saving arithmetic is the database's problem, not ours.
+-- Flag columns stay INTEGER 0/1 rather than BOOLEAN to keep one representation
+-- across the API surface.
 
 -- ---------------------------------------------------------------------------
 -- Admissions: a prospective learner applies first, and only an approved
@@ -18,8 +22,8 @@ CREATE TABLE IF NOT EXISTS applications (
   status            TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','REJECTED','ENROLLED')),
   access_code       TEXT UNIQUE,
   review_note       TEXT,
-  reviewed_at       TEXT,
-  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+  reviewed_at       TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS users (
@@ -31,16 +35,16 @@ CREATE TABLE IF NOT EXISTS users (
   role            TEXT NOT NULL DEFAULT 'LEARNER' CHECK (role IN ('LEARNER','ADMIN')),
   timezone        TEXT NOT NULL DEFAULT 'UTC',
   status          TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','SUSPENDED')),
-  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   id          TEXT PRIMARY KEY,
   user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash  TEXT NOT NULL UNIQUE,
-  expires_at  TEXT NOT NULL,
-  revoked_at  TEXT,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  expires_at  TIMESTAMPTZ NOT NULL,
+  revoked_at  TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
 
@@ -48,20 +52,20 @@ CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
 -- Catalog
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS courses (
-  id            TEXT PRIMARY KEY,
-  slug          TEXT NOT NULL UNIQUE,
-  title         TEXT NOT NULL,
-  summary       TEXT NOT NULL,
-  description   TEXT NOT NULL,
-  category      TEXT NOT NULL,
-  level         TEXT NOT NULL CHECK (level IN ('BEGINNER','INTERMEDIATE','ADVANCED')),
-  duration_hours REAL NOT NULL DEFAULT 6,
-  accent        TEXT NOT NULL DEFAULT 'slate',
-  outcomes      TEXT NOT NULL DEFAULT '[]',
-  prerequisites TEXT NOT NULL DEFAULT '[]',
-  position      INTEGER NOT NULL DEFAULT 0,
-  published     INTEGER NOT NULL DEFAULT 1,
-  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  id             TEXT PRIMARY KEY,
+  slug           TEXT NOT NULL UNIQUE,
+  title          TEXT NOT NULL,
+  summary        TEXT NOT NULL,
+  description    TEXT NOT NULL,
+  category       TEXT NOT NULL,
+  level          TEXT NOT NULL CHECK (level IN ('BEGINNER','INTERMEDIATE','ADVANCED')),
+  duration_hours DOUBLE PRECISION NOT NULL DEFAULT 6,
+  accent         TEXT NOT NULL DEFAULT 'slate',
+  outcomes       TEXT NOT NULL DEFAULT '[]',
+  prerequisites  TEXT NOT NULL DEFAULT '[]',
+  position       INTEGER NOT NULL DEFAULT 0,
+  published      INTEGER NOT NULL DEFAULT 1,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS chapters (
@@ -98,25 +102,25 @@ CREATE TABLE IF NOT EXISTS enrollments (
   user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   course_id     TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
   status        TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','COMPLETED','PAUSED')),
-  completed_at  TEXT,
-  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  completed_at  TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (user_id, course_id)
 );
 
 CREATE TABLE IF NOT EXISTS chapter_progress (
-  id                  TEXT PRIMARY KEY,
-  enrollment_id       TEXT NOT NULL REFERENCES enrollments(id) ON DELETE CASCADE,
-  chapter_id          TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
-  state               TEXT NOT NULL DEFAULT 'LOCKED'
-                        CHECK (state IN ('LOCKED','AVAILABLE','STUDYING','EXAM_READY','REWARD_READY','REWARD_ACTIVE','COMPLETED')),
-  study_started_at    TEXT,
-  study_seconds       INTEGER NOT NULL DEFAULT 0,
-  attempts            INTEGER NOT NULL DEFAULT 0,
-  best_score          INTEGER NOT NULL DEFAULT 0,
-  passed_at           TEXT,
-  completed_at        TEXT,
-  cooldown_until      TEXT,
-  updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
+  id                TEXT PRIMARY KEY,
+  enrollment_id     TEXT NOT NULL REFERENCES enrollments(id) ON DELETE CASCADE,
+  chapter_id        TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+  state             TEXT NOT NULL DEFAULT 'LOCKED'
+                      CHECK (state IN ('LOCKED','AVAILABLE','STUDYING','EXAM_READY','REWARD_READY','REWARD_ACTIVE','COMPLETED')),
+  study_started_at  TIMESTAMPTZ,
+  study_seconds     INTEGER NOT NULL DEFAULT 0,
+  attempts          INTEGER NOT NULL DEFAULT 0,
+  best_score        INTEGER NOT NULL DEFAULT 0,
+  passed_at         TIMESTAMPTZ,
+  completed_at      TIMESTAMPTZ,
+  cooldown_until    TIMESTAMPTZ,
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (enrollment_id, chapter_id)
 );
 CREATE INDEX IF NOT EXISTS idx_chapter_progress_enrollment ON chapter_progress(enrollment_id);
@@ -125,9 +129,9 @@ CREATE TABLE IF NOT EXISTS exam_attempts (
   id             TEXT PRIMARY KEY,
   user_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   chapter_id     TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
-  started_at     TEXT NOT NULL DEFAULT (datetime('now')),
-  submitted_at   TEXT,
-  expires_at     TEXT NOT NULL,
+  started_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  submitted_at   TIMESTAMPTZ,
+  expires_at     TIMESTAMPTZ NOT NULL,
   score          INTEGER,
   pass_mark      INTEGER NOT NULL,
   passed         INTEGER,
@@ -140,23 +144,23 @@ CREATE INDEX IF NOT EXISTS idx_exam_attempts_user_chapter ON exam_attempts(user_
 -- The server owns the clock: expires_at is set at grant time and is never
 -- extended by the client.
 CREATE TABLE IF NOT EXISTS reward_sessions (
-  id              TEXT PRIMARY KEY,
-  user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  chapter_id      TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
-  attempt_id      TEXT REFERENCES exam_attempts(id) ON DELETE SET NULL,
-  minutes_granted INTEGER NOT NULL,
-  movie_id        TEXT,
-  movie_title     TEXT,
-  movie_source    TEXT,
+  id               TEXT PRIMARY KEY,
+  user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  chapter_id       TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+  attempt_id       TEXT REFERENCES exam_attempts(id) ON DELETE SET NULL,
+  minutes_granted  INTEGER NOT NULL,
+  movie_id         TEXT,
+  movie_title      TEXT,
+  movie_source     TEXT,
   movie_stream_url TEXT,
-  movie_poster    TEXT,
-  status          TEXT NOT NULL DEFAULT 'GRANTED'
-                    CHECK (status IN ('GRANTED','ACTIVE','EXPIRED','ENDED','FORFEITED')),
-  granted_at      TEXT NOT NULL DEFAULT (datetime('now')),
-  started_at      TEXT,
-  expires_at      TEXT,
-  ended_at        TEXT,
-  seconds_watched INTEGER NOT NULL DEFAULT 0
+  movie_poster     TEXT,
+  status           TEXT NOT NULL DEFAULT 'GRANTED'
+                     CHECK (status IN ('GRANTED','ACTIVE','EXPIRED','ENDED','FORFEITED')),
+  granted_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  started_at       TIMESTAMPTZ,
+  expires_at       TIMESTAMPTZ,
+  ended_at         TIMESTAMPTZ,
+  seconds_watched  INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_reward_sessions_user ON reward_sessions(user_id, status);
 
@@ -173,17 +177,17 @@ CREATE TABLE IF NOT EXISTS study_schedules (
   duration_minutes INTEGER NOT NULL DEFAULT 60,
   reminder_minutes INTEGER NOT NULL DEFAULT 10,
   active           INTEGER NOT NULL DEFAULT 1,
-  created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_schedules_user ON study_schedules(user_id, day_of_week);
 
 CREATE TABLE IF NOT EXISTS schedule_alerts (
-  id           TEXT PRIMARY KEY,
-  schedule_id  TEXT NOT NULL REFERENCES study_schedules(id) ON DELETE CASCADE,
-  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  occurrence   TEXT NOT NULL,
-  acknowledged_at TEXT,
-  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  id              TEXT PRIMARY KEY,
+  schedule_id     TEXT NOT NULL REFERENCES study_schedules(id) ON DELETE CASCADE,
+  user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  occurrence      TEXT NOT NULL,
+  acknowledged_at TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (schedule_id, occurrence)
 );
 
@@ -199,7 +203,7 @@ CREATE TABLE IF NOT EXISTS movie_preferences (
   source      TEXT,
   year        INTEGER,
   payload     TEXT NOT NULL DEFAULT '{}',
-  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (user_id, movie_id)
 );
 CREATE INDEX IF NOT EXISTS idx_movie_preferences_user ON movie_preferences(user_id, decision);
@@ -207,7 +211,7 @@ CREATE INDEX IF NOT EXISTS idx_movie_preferences_user ON movie_preferences(user_
 CREATE TABLE IF NOT EXISTS movie_cache (
   cache_key  TEXT PRIMARY KEY,
   payload    TEXT NOT NULL,
-  fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -215,5 +219,5 @@ CREATE TABLE IF NOT EXISTS audit_log (
   user_id    TEXT REFERENCES users(id) ON DELETE SET NULL,
   action     TEXT NOT NULL,
   detail     TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

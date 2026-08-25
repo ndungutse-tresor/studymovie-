@@ -27,19 +27,20 @@ const scheduleSchema = z.object({
 
 scheduleRouter.get(
   '/',
-  asyncHandler((req, res) => {
-    res.json({
-      schedules: listSchedules(req.user!.id, req.user!.timezone),
-      upcoming: upcomingOccurrences(req.user!.id, req.user!.timezone),
-    });
+  asyncHandler(async (req, res) => {
+    const [schedules, upcoming] = await Promise.all([
+      listSchedules(req.user!.id, req.user!.timezone),
+      upcomingOccurrences(req.user!.id, req.user!.timezone),
+    ]);
+    res.json({ schedules, upcoming });
   }),
 );
 
 /** Polled by the client so a due session raises an alert without a push subscription. */
 scheduleRouter.get(
   '/alerts',
-  asyncHandler((req, res) => {
-    const occurrences = upcomingOccurrences(req.user!.id, req.user!.timezone, 2);
+  asyncHandler(async (req, res) => {
+    const occurrences = await upcomingOccurrences(req.user!.id, req.user!.timezone, 2);
     res.json({
       due: occurrences.filter((occurrence) => occurrence.alertDue),
       next: occurrences.find((occurrence) => occurrence.minutesUntilStart >= 0) ?? null,
@@ -49,10 +50,10 @@ scheduleRouter.get(
 
 scheduleRouter.post(
   '/',
-  asyncHandler((req, res) => {
+  asyncHandler(async (req, res) => {
     const input = scheduleSchema.parse(req.body);
     res.status(201).json({
-      schedule: createSchedule(req.user!.id, req.user!.timezone, {
+      schedule: await createSchedule(req.user!.id, req.user!.timezone, {
         ...input,
         courseId: input.courseId ?? null,
       }),
@@ -62,10 +63,10 @@ scheduleRouter.post(
 
 scheduleRouter.patch(
   '/:id',
-  asyncHandler((req, res) => {
+  asyncHandler(async (req, res) => {
     const input = scheduleSchema.partial().parse(req.body);
     res.json({
-      schedule: updateSchedule(req.user!.id, req.user!.timezone, req.params.id, {
+      schedule: await updateSchedule(req.user!.id, req.user!.timezone, req.params.id, {
         ...input,
         courseId: input.courseId === undefined ? undefined : (input.courseId ?? null),
       }),
@@ -75,15 +76,15 @@ scheduleRouter.patch(
 
 scheduleRouter.delete(
   '/:id',
-  asyncHandler((req, res) => {
-    res.json(deleteSchedule(req.user!.id, req.params.id));
+  asyncHandler(async (req, res) => {
+    res.json(await deleteSchedule(req.user!.id, req.params.id));
   }),
 );
 
 scheduleRouter.post(
   '/:id/acknowledge',
-  asyncHandler((req, res) => {
+  asyncHandler(async (req, res) => {
     const { occurrence } = z.object({ occurrence: z.string().min(10) }).parse(req.body);
-    res.json(acknowledgeAlert(req.user!.id, req.params.id, occurrence));
+    res.json(await acknowledgeAlert(req.user!.id, req.params.id, occurrence));
   }),
 );

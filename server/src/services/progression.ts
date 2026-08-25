@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import { db, nowIso, parseSqlDate, toIso, transaction } from '../db/index.js';
+import { one, nowIso, parseSqlDate, query, run, toIso, transaction } from '../db/index.js';
 import { id } from '../lib/ids.js';
 import { HttpError } from '../lib/http-error.js';
 
@@ -29,13 +29,13 @@ interface ProgressRow {
   enrollment_id: string;
   chapter_id: string;
   state: ProgressState;
-  study_started_at: string | null;
+  study_started_at: Date | null;
   study_seconds: number;
   attempts: number;
   best_score: number;
-  passed_at: string | null;
-  completed_at: string | null;
-  cooldown_until: string | null;
+  passed_at: Date | null;
+  completed_at: Date | null;
+  cooldown_until: Date | null;
 }
 
 interface EnrollmentRow {
@@ -43,8 +43,8 @@ interface EnrollmentRow {
   user_id: string;
   course_id: string;
   status: 'ACTIVE' | 'COMPLETED' | 'PAUSED';
-  completed_at: string | null;
-  created_at: string;
+  completed_at: Date | null;
+  created_at: Date;
 }
 
 export interface RewardSessionRow {
@@ -59,10 +59,10 @@ export interface RewardSessionRow {
   movie_stream_url: string | null;
   movie_poster: string | null;
   status: 'GRANTED' | 'ACTIVE' | 'EXPIRED' | 'ENDED' | 'FORFEITED';
-  granted_at: string;
-  started_at: string | null;
-  expires_at: string | null;
-  ended_at: string | null;
+  granted_at: Date;
+  started_at: Date | null;
+  expires_at: Date | null;
+  ended_at: Date | null;
   seconds_watched: number;
 }
 
@@ -70,42 +70,45 @@ export interface RewardSessionRow {
 // Enrollment
 // ---------------------------------------------------------------------------
 
-export function enroll(userId: string, courseId: string): EnrollmentRow {
-  const course = db.prepare('SELECT id FROM courses WHERE id = ? AND published = 1').get(courseId) as
-    | { id: string }
-    | undefined;
+export async function enroll(userId: string, courseId: string): Promise<EnrollmentRow> {
+  const course = await one<{ id: string }>(
+    'SELECT id FROM courses WHERE id = ? AND published = 1',
+    courseId,
+  );
   if (!course) throw HttpError.notFound('That course is not available.');
 
-  const existing = db
-    .prepare('SELECT * FROM enrollments WHERE user_id = ? AND course_id = ?')
-    .get(userId, courseId) as EnrollmentRow | undefined;
+  const existing = await one<EnrollmentRow>(
+    'SELECT * FROM enrollments WHERE user_id = ? AND course_id = ?',
+    userId,
+    courseId,
+  );
   if (existing) return existing;
 
-  return transaction(() => {
+  return transaction(async () => {
     const enrollmentId = id('enr');
-    db.prepare('INSERT INTO enrollments (id, user_id, course_id) VALUES (?, ?, ?)').run(
-      enrollmentId,
-      userId,
+    await run('INSERT INTO enrollments (id, user_id, course_id) VALUES (?, ?, ?)', enrollmentId, userId, courseId);
+
+    const chapters = await query<{ id: string; position: number }>(
+      'SELECT id, position FROM chapters WHERE course_id = ? ORDER BY position',
       courseId,
     );
-
-    const chapters = db
-      .prepare('SELECT id, position FROM chapters WHERE course_id = ? ORDER BY position')
-      .all(courseId) as { id: string; position: number }[];
 
     if (chapters.length === 0) {
       throw HttpError.conflict('That course has no published chapters yet.');
     }
 
-    const insert = db.prepare(
-      'INSERT INTO chapter_progress (id, enrollment_id, chapter_id, state) VALUES (?, ?, ?, ?)',
-    );
     // Only the first chapter opens; everything after it is gated behind an exam.
     for (const chapter of chapters) {
-      insert.run(id('prg'), enrollmentId, chapter.id, chapter.position === 0 ? 'AVAILABLE' : 'LOCKED');
+      await run(
+        'INSERT INTO chapter_progress (id, enrollment_id, chapter_id, state) VALUES (?, ?, ?, ?)',
+        id('prg'),
+        enrollmentId,
+        chapter.id,
+        chapter.position === 0 ? 'AVAILABLE' : 'LOCKED',
+      );
     }
 
-    return db.prepare('SELECT * FROM enrollments WHERE id = ?').get(enrollmentId) as EnrollmentRow;
+    return (await one<EnrollmentRow>('SELECT * FROM enrollments WHERE id = ?', enrollmentId))!;
   });
 }
 
@@ -119,48 +122,55 @@ export interface ChapterContext {
   progress: ProgressRow;
 }
 
-export function chapterContext(userId: string, chapterId: string): ChapterContext {
-  const chapter = db.prepare('SELECT * FROM chapters WHERE id = ?').get(chapterId) as
-    | ChapterRow
-    | undefined;
+export async function chapterContext(userId: string, chapterId: string): Promise<ChapterContext> {
+  const chapter = await one<ChapterRow>('SELECT * FROM chapters WHERE id = ?', chapterId);
   if (!chapter) throw HttpError.notFound('That chapter does not exist.');
 
-  const enrollment = db
-    .prepare('SELECT * FROM enrollments WHERE user_id = ? AND course_id = ?')
-    .get(userId, chapter.course_id) as EnrollmentRow | undefined;
+  const enrollment = await one<EnrollmentRow>(
+    'SELECT * FROM enrollments WHERE user_id = ? AND course_id = ?',
+    userId,
+    chapter.course_id,
+  );
   if (!enrollment) throw HttpError.forbidden('Enroll in this course before opening its chapters.');
 
-  const progress = db
-    .prepare('SELECT * FROM chapter_progress WHERE enrollment_id = ? AND chapter_id = ?')
-    .get(enrollment.id, chapter.id) as ProgressRow | undefined;
+  const progress = await one<ProgressRow>(
+    'SELECT * FROM chapter_progress WHERE enrollment_id = ? AND chapter_id = ?',
+    enrollment.id,
+    chapter.id,
+  );
   if (!progress) throw HttpError.notFound('No progress record exists for that chapter.');
 
   return { chapter, enrollment, progress };
 }
 
-function setState(progressId: string, state: ProgressState, extra: Record<string, unknown> = {}): void {
-  const assignments = ['state = @state', 'updated_at = @updatedAt'];
-  for (const key of Object.keys(extra)) {
-    assignments.push(`${key} = @${toParam(key)}`);
-  }
-  const params: Record<string, unknown> = { state, updatedAt: nowIso(), progressId };
-  for (const [key, value] of Object.entries(extra)) params[toParam(key)] = value;
+/** Column names are internal constants here, never user input. */
+async function setState(
+  progressId: string,
+  state: ProgressState,
+  extra: Record<string, unknown> = {},
+): Promise<void> {
+  const columns = Object.keys(extra);
+  const assignments = ['state = ?', 'updated_at = ?', ...columns.map((column) => `${column} = ?`)];
+  const values = [state, nowIso(), ...columns.map((column) => extra[column]), progressId];
 
-  db.prepare(`UPDATE chapter_progress SET ${assignments.join(', ')} WHERE id = @progressId`).run(params);
-}
-
-function toParam(column: string): string {
-  return column.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase());
+  await run(`UPDATE chapter_progress SET ${assignments.join(', ')} WHERE id = ?`, ...values);
 }
 
 // ---------------------------------------------------------------------------
 // Study
 // ---------------------------------------------------------------------------
 
-const OPEN_STATES: ProgressState[] = ['AVAILABLE', 'STUDYING', 'EXAM_READY', 'REWARD_READY', 'REWARD_ACTIVE', 'COMPLETED'];
+const OPEN_STATES: ProgressState[] = [
+  'AVAILABLE',
+  'STUDYING',
+  'EXAM_READY',
+  'REWARD_READY',
+  'REWARD_ACTIVE',
+  'COMPLETED',
+];
 
-export function beginStudy(userId: string, chapterId: string) {
-  const { progress } = chapterContext(userId, chapterId);
+export async function beginStudy(userId: string, chapterId: string) {
+  const { progress } = await chapterContext(userId, chapterId);
 
   if (progress.state === 'LOCKED') {
     throw HttpError.forbidden('Pass the previous chapter exam to unlock this chapter.');
@@ -168,16 +178,16 @@ export function beginStudy(userId: string, chapterId: string) {
 
   // Re-opening a chapter that is already past the study gate must not reset it.
   if (progress.state === 'AVAILABLE') {
-    setState(progress.id, 'STUDYING', { study_started_at: nowIso() });
+    await setState(progress.id, 'STUDYING', { study_started_at: nowIso() });
   } else if (progress.state === 'STUDYING' && !progress.study_started_at) {
-    setState(progress.id, 'STUDYING', { study_started_at: nowIso() });
+    await setState(progress.id, 'STUDYING', { study_started_at: nowIso() });
   }
 
   return studyStatus(userId, chapterId);
 }
 
-export function studyStatus(userId: string, chapterId: string) {
-  const { chapter, progress } = chapterContext(userId, chapterId);
+export async function studyStatus(userId: string, chapterId: string) {
+  const { chapter, progress } = await chapterContext(userId, chapterId);
   const startedAt = parseSqlDate(progress.study_started_at);
   const elapsedSeconds = startedAt
     ? Math.max(0, Math.floor((Date.now() - startedAt.getTime()) / 1000)) + progress.study_seconds
@@ -201,9 +211,9 @@ export function studyStatus(userId: string, chapterId: string) {
 }
 
 /** Marks the reading complete once the minimum dwell time has genuinely elapsed. */
-export function completeStudy(userId: string, chapterId: string) {
-  const { progress } = chapterContext(userId, chapterId);
-  const status = studyStatus(userId, chapterId);
+export async function completeStudy(userId: string, chapterId: string) {
+  const { progress } = await chapterContext(userId, chapterId);
+  const status = await studyStatus(userId, chapterId);
 
   if (progress.state === 'LOCKED') {
     throw HttpError.forbidden('This chapter is still locked.');
@@ -216,7 +226,10 @@ export function completeStudy(userId: string, chapterId: string) {
   }
 
   if (progress.state === 'AVAILABLE' || progress.state === 'STUDYING') {
-    setState(progress.id, 'EXAM_READY', { study_seconds: status.elapsedSeconds, study_started_at: null });
+    await setState(progress.id, 'EXAM_READY', {
+      study_seconds: status.elapsedSeconds,
+      study_started_at: null,
+    });
   }
 
   return studyStatus(userId, chapterId);
@@ -240,9 +253,9 @@ export interface AttemptRow {
   id: string;
   user_id: string;
   chapter_id: string;
-  started_at: string;
-  submitted_at: string | null;
-  expires_at: string;
+  started_at: Date;
+  submitted_at: Date | null;
+  expires_at: Date;
   score: number | null;
   pass_mark: number;
   passed: number | null;
@@ -250,76 +263,85 @@ export interface AttemptRow {
   question_order: string;
 }
 
-export function startExam(userId: string, chapterId: string) {
-  const { chapter, progress } = chapterContext(userId, chapterId);
+export async function startExam(userId: string, chapterId: string) {
+  const { chapter, progress } = await chapterContext(userId, chapterId);
 
   if (!OPEN_STATES.includes(progress.state)) {
     throw HttpError.forbidden('This chapter is locked.');
   }
   if (progress.state === 'AVAILABLE' || progress.state === 'STUDYING') {
-    const status = studyStatus(userId, chapterId);
+    const status = await studyStatus(userId, chapterId);
     if (!status.examUnlocked) {
       throw HttpError.forbidden('Finish studying this chapter before starting the exam.', {
         remainingSeconds: status.remainingSeconds,
       });
     }
-    setState(progress.id, 'EXAM_READY', { study_seconds: status.elapsedSeconds, study_started_at: null });
+    await setState(progress.id, 'EXAM_READY', {
+      study_seconds: status.elapsedSeconds,
+      study_started_at: null,
+    });
   }
 
   const cooldownUntil = parseSqlDate(progress.cooldown_until);
   if (cooldownUntil && cooldownUntil.getTime() > Date.now()) {
-    throw HttpError.tooManyRequests(
-      'Review the chapter before retrying. The next attempt opens shortly.',
-      { retryAfterSeconds: Math.ceil((cooldownUntil.getTime() - Date.now()) / 1000) },
-    );
+    throw HttpError.tooManyRequests('Review the chapter before retrying. The next attempt opens shortly.', {
+      retryAfterSeconds: Math.ceil((cooldownUntil.getTime() - Date.now()) / 1000),
+    });
   }
 
   // Reuse an attempt that is still within its window rather than issuing a new one.
-  const open = db
-    .prepare(
-      `SELECT * FROM exam_attempts
-        WHERE user_id = ? AND chapter_id = ? AND submitted_at IS NULL
-        ORDER BY started_at DESC LIMIT 1`,
-    )
-    .get(userId, chapterId) as AttemptRow | undefined;
+  const open = await one<AttemptRow>(
+    `SELECT * FROM exam_attempts
+      WHERE user_id = ? AND chapter_id = ? AND submitted_at IS NULL
+      ORDER BY started_at DESC LIMIT 1`,
+    userId,
+    chapterId,
+  );
 
   if (open) {
     const expiry = parseSqlDate(open.expires_at);
     if (expiry && expiry.getTime() > Date.now()) return presentAttempt(open);
     // Window elapsed: grade whatever was recorded so the attempt is not left dangling.
-    gradeAttempt(open, JSON.parse(open.answers) as Record<string, number>);
+    await gradeAttempt(open, JSON.parse(open.answers) as Record<string, number>);
   }
 
-  const questions = db
-    .prepare('SELECT id FROM questions WHERE chapter_id = ? ORDER BY position')
-    .all(chapterId) as { id: string }[];
+  const questions = await query<{ id: string }>(
+    'SELECT id FROM questions WHERE chapter_id = ? ORDER BY position',
+    chapterId,
+  );
   if (questions.length === 0) throw HttpError.conflict('This chapter has no exam questions yet.');
 
   const order = shuffle(questions.map((question) => question.id));
   const attemptId = id('att');
   const expiresAt = toIso(new Date(Date.now() + config.learning.examWindowSeconds * 1000));
 
-  db.prepare(
+  await run(
     `INSERT INTO exam_attempts (id, user_id, chapter_id, expires_at, pass_mark, answers, question_order)
      VALUES (?, ?, ?, ?, ?, '{}', ?)`,
-  ).run(attemptId, userId, chapterId, expiresAt, chapter.pass_mark, JSON.stringify(order));
+    attemptId,
+    userId,
+    chapterId,
+    expiresAt,
+    chapter.pass_mark,
+    JSON.stringify(order),
+  );
 
-  return presentAttempt(db.prepare('SELECT * FROM exam_attempts WHERE id = ?').get(attemptId) as AttemptRow);
+  return presentAttempt((await one<AttemptRow>('SELECT * FROM exam_attempts WHERE id = ?', attemptId))!);
 }
 
 /** Returns the attempt with correct answers withheld. */
-function presentAttempt(attempt: AttemptRow) {
+async function presentAttempt(attempt: AttemptRow) {
   const order = JSON.parse(attempt.question_order) as string[];
-  const rows = db
-    .prepare(
-      `SELECT id, prompt, options FROM questions WHERE id IN (${order.map(() => '?').join(',')})`,
-    )
-    .all(...order) as { id: string; prompt: string; options: string }[];
+  const rows = await query<{ id: string; prompt: string; options: string }>(
+    `SELECT id, prompt, options FROM questions WHERE id IN (${order.map(() => '?').join(',')})`,
+    ...order,
+  );
 
   const byId = new Map(rows.map((row) => [row.id, row]));
-  const chapter = db.prepare('SELECT title, pass_mark, reward_minutes FROM chapters WHERE id = ?').get(
+  const chapter = (await one<{ title: string; pass_mark: number; reward_minutes: number }>(
+    'SELECT title, pass_mark, reward_minutes FROM chapters WHERE id = ?',
     attempt.chapter_id,
-  ) as { title: string; pass_mark: number; reward_minutes: number };
+  ))!;
 
   const expiresAt = parseSqlDate(attempt.expires_at);
 
@@ -343,27 +365,25 @@ function presentAttempt(attempt: AttemptRow) {
   };
 }
 
-export function saveAnswers(userId: string, attemptId: string, answers: Record<string, number>) {
-  const attempt = loadAttempt(userId, attemptId);
+export async function saveAnswers(userId: string, attemptId: string, answers: Record<string, number>) {
+  const attempt = await loadAttempt(userId, attemptId);
   if (attempt.submitted_at) throw HttpError.conflict('This attempt has already been submitted.');
 
   const merged = { ...(JSON.parse(attempt.answers) as Record<string, number>), ...answers };
-  db.prepare('UPDATE exam_attempts SET answers = ? WHERE id = ?').run(JSON.stringify(merged), attemptId);
+  await run('UPDATE exam_attempts SET answers = ? WHERE id = ?', JSON.stringify(merged), attemptId);
   return { saved: Object.keys(merged).length };
 }
 
-export function submitExam(userId: string, attemptId: string, answers: Record<string, number>) {
-  const attempt = loadAttempt(userId, attemptId);
+export async function submitExam(userId: string, attemptId: string, answers: Record<string, number>) {
+  const attempt = await loadAttempt(userId, attemptId);
   if (attempt.submitted_at) throw HttpError.conflict('This attempt has already been submitted.');
 
   const merged = { ...(JSON.parse(attempt.answers) as Record<string, number>), ...answers };
   return gradeAttempt(attempt, merged);
 }
 
-function loadAttempt(userId: string, attemptId: string): AttemptRow {
-  const attempt = db.prepare('SELECT * FROM exam_attempts WHERE id = ?').get(attemptId) as
-    | AttemptRow
-    | undefined;
+async function loadAttempt(userId: string, attemptId: string): Promise<AttemptRow> {
+  const attempt = await one<AttemptRow>('SELECT * FROM exam_attempts WHERE id = ?', attemptId);
   if (!attempt) throw HttpError.notFound('That exam attempt does not exist.');
   if (attempt.user_id !== userId) throw HttpError.forbidden('That exam attempt belongs to another learner.');
   return attempt;
@@ -397,11 +417,12 @@ export interface ExamResult {
  * session that unlocks movie time. Grading is server-side only; the client
  * never sees a correct answer before submission.
  */
-function gradeAttempt(attempt: AttemptRow, answers: Record<string, number>): ExamResult {
+async function gradeAttempt(attempt: AttemptRow, answers: Record<string, number>): Promise<ExamResult> {
   const order = JSON.parse(attempt.question_order) as string[];
-  const questions = db
-    .prepare(`SELECT * FROM questions WHERE id IN (${order.map(() => '?').join(',')})`)
-    .all(...order) as QuestionRow[];
+  const questions = await query<QuestionRow>(
+    `SELECT * FROM questions WHERE id IN (${order.map(() => '?').join(',')})`,
+    ...order,
+  );
   const byId = new Map(questions.map((question) => [question.id, question]));
 
   let correctCount = 0;
@@ -428,14 +449,19 @@ function gradeAttempt(attempt: AttemptRow, answers: Record<string, number>): Exa
   const score = total === 0 ? 0 : Math.round((correctCount / total) * 100);
   const passed = score >= attempt.pass_mark;
 
-  const chapter = db.prepare('SELECT * FROM chapters WHERE id = ?').get(attempt.chapter_id) as ChapterRow;
+  const chapter = (await one<ChapterRow>('SELECT * FROM chapters WHERE id = ?', attempt.chapter_id))!;
 
-  return transaction(() => {
-    db.prepare(
-      `UPDATE exam_attempts SET submitted_at = ?, score = ?, passed = ?, answers = ? WHERE id = ?`,
-    ).run(nowIso(), score, passed ? 1 : 0, JSON.stringify(answers), attempt.id);
+  return transaction(async () => {
+    await run(
+      'UPDATE exam_attempts SET submitted_at = ?, score = ?, passed = ?, answers = ? WHERE id = ?',
+      nowIso(),
+      score,
+      passed ? 1 : 0,
+      JSON.stringify(answers),
+      attempt.id,
+    );
 
-    const context = chapterContext(attempt.user_id, attempt.chapter_id);
+    const context = await chapterContext(attempt.user_id, attempt.chapter_id);
     const attempts = context.progress.attempts + 1;
     const bestScore = Math.max(context.progress.best_score, score);
 
@@ -444,12 +470,17 @@ function gradeAttempt(attempt: AttemptRow, answers: Record<string, number>): Exa
 
     if (passed) {
       rewardSessionId = id('rwd');
-      db.prepare(
+      await run(
         `INSERT INTO reward_sessions (id, user_id, chapter_id, attempt_id, minutes_granted, status)
          VALUES (?, ?, ?, ?, ?, 'GRANTED')`,
-      ).run(rewardSessionId, attempt.user_id, attempt.chapter_id, attempt.id, chapter.reward_minutes);
+        rewardSessionId,
+        attempt.user_id,
+        attempt.chapter_id,
+        attempt.id,
+        chapter.reward_minutes,
+      );
 
-      setState(context.progress.id, 'REWARD_READY', {
+      await setState(context.progress.id, 'REWARD_READY', {
         attempts,
         best_score: bestScore,
         passed_at: nowIso(),
@@ -459,12 +490,10 @@ function gradeAttempt(attempt: AttemptRow, answers: Record<string, number>): Exa
       // A cool-down after repeated failures pushes the learner back to the material.
       const needsCooldown = attempts % config.learning.maxAttemptsBeforeCooldown === 0;
       cooldownSeconds = needsCooldown ? config.learning.retryCooldownSeconds : 0;
-      setState(context.progress.id, 'EXAM_READY', {
+      await setState(context.progress.id, 'EXAM_READY', {
         attempts,
         best_score: bestScore,
-        cooldown_until: needsCooldown
-          ? toIso(new Date(Date.now() + cooldownSeconds * 1000))
-          : null,
+        cooldown_until: needsCooldown ? toIso(new Date(Date.now() + cooldownSeconds * 1000)) : null,
       });
     }
 

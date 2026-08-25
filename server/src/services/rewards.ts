@@ -1,4 +1,4 @@
-import { db, nowIso, parseSqlDate, toIso, transaction } from '../db/index.js';
+import { one, nowIso, parseSqlDate, query, run, toIso, transaction } from '../db/index.js';
 import { HttpError } from '../lib/http-error.js';
 import { chapterContext, type RewardSessionRow } from './progression.js';
 
@@ -27,10 +27,8 @@ export interface RewardView {
   courseCompleted: boolean;
 }
 
-function loadSession(userId: string, sessionId: string): RewardSessionRow {
-  const session = db.prepare('SELECT * FROM reward_sessions WHERE id = ?').get(sessionId) as
-    | RewardSessionRow
-    | undefined;
+async function loadSession(userId: string, sessionId: string): Promise<RewardSessionRow> {
+  const session = await one<RewardSessionRow>('SELECT * FROM reward_sessions WHERE id = ?', sessionId);
   if (!session) throw HttpError.notFound('That viewing session does not exist.');
   if (session.user_id !== userId) {
     throw HttpError.forbidden('That viewing session belongs to another learner.');
@@ -42,39 +40,47 @@ function loadSession(userId: string, sessionId: string): RewardSessionRow {
  * Advances the chapter to COMPLETED and opens the next one. Called exactly once
  * per reward session, whichever way the session ends.
  */
-function unlockNextChapter(userId: string, chapterId: string): {
-  nextChapterId: string | null;
-  courseCompleted: boolean;
-} {
-  const { chapter, enrollment, progress } = chapterContext(userId, chapterId);
+async function unlockNextChapter(
+  userId: string,
+  chapterId: string,
+): Promise<{ nextChapterId: string | null; courseCompleted: boolean }> {
+  const { chapter, enrollment, progress } = await chapterContext(userId, chapterId);
 
   if (progress.state !== 'COMPLETED') {
-    db.prepare(
+    await run(
       `UPDATE chapter_progress SET state = 'COMPLETED', completed_at = ?, updated_at = ? WHERE id = ?`,
-    ).run(nowIso(), nowIso(), progress.id);
+      nowIso(),
+      nowIso(),
+      progress.id,
+    );
   }
 
-  const next = db
-    .prepare('SELECT id FROM chapters WHERE course_id = ? AND position = ?')
-    .get(chapter.course_id, chapter.position + 1) as { id: string } | undefined;
+  const next = await one<{ id: string }>(
+    'SELECT id FROM chapters WHERE course_id = ? AND position = ?',
+    chapter.course_id,
+    chapter.position + 1,
+  );
 
   if (next) {
-    db.prepare(
+    await run(
       `UPDATE chapter_progress
           SET state = 'AVAILABLE', updated_at = ?
         WHERE enrollment_id = ? AND chapter_id = ? AND state = 'LOCKED'`,
-    ).run(nowIso(), enrollment.id, next.id);
+      nowIso(),
+      enrollment.id,
+      next.id,
+    );
     return { nextChapterId: next.id, courseCompleted: false };
   }
 
-  const outstanding = db
-    .prepare(
-      `SELECT COUNT(*) AS n FROM chapter_progress WHERE enrollment_id = ? AND state != 'COMPLETED'`,
-    )
-    .get(enrollment.id) as { n: number };
+  const outstanding = (await one<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM chapter_progress WHERE enrollment_id = ? AND state != 'COMPLETED'`,
+    enrollment.id,
+  ))!;
 
   if (outstanding.n === 0) {
-    db.prepare(`UPDATE enrollments SET status = 'COMPLETED', completed_at = ? WHERE id = ?`).run(
+    await run(
+      `UPDATE enrollments SET status = 'COMPLETED', completed_at = ? WHERE id = ?`,
       nowIso(),
       enrollment.id,
     );
@@ -84,36 +90,39 @@ function unlockNextChapter(userId: string, chapterId: string): {
   return { nextChapterId: null, courseCompleted: false };
 }
 
-function conclude(
+async function conclude(
   session: RewardSessionRow,
   status: 'EXPIRED' | 'ENDED' | 'FORFEITED',
-): { nextChapterId: string | null; courseCompleted: boolean } {
-  return transaction(() => {
+): Promise<{ nextChapterId: string | null; courseCompleted: boolean }> {
+  return transaction(async () => {
     const startedAt = parseSqlDate(session.started_at);
     const watched = startedAt
       ? Math.max(session.seconds_watched, Math.floor((Date.now() - startedAt.getTime()) / 1000))
       : session.seconds_watched;
 
-    db.prepare(
-      `UPDATE reward_sessions SET status = ?, ended_at = ?, seconds_watched = ? WHERE id = ?`,
-    ).run(status, nowIso(), Math.min(watched, session.minutes_granted * 60), session.id);
+    await run(
+      'UPDATE reward_sessions SET status = ?, ended_at = ?, seconds_watched = ? WHERE id = ?',
+      status,
+      nowIso(),
+      Math.min(watched, session.minutes_granted * 60),
+      session.id,
+    );
 
     return unlockNextChapter(session.user_id, session.chapter_id);
   });
 }
 
-function view(
+async function view(
   userId: string,
   session: RewardSessionRow,
   unlocked?: { nextChapterId: string | null; courseCompleted: boolean },
-): RewardView {
-  const meta = db
-    .prepare(
-      `SELECT ch.title AS chapter_title, c.title AS course_title
-         FROM chapters ch JOIN courses c ON c.id = ch.course_id
-        WHERE ch.id = ?`,
-    )
-    .get(session.chapter_id) as { chapter_title: string; course_title: string };
+): Promise<RewardView> {
+  const meta = (await one<{ chapter_title: string; course_title: string }>(
+    `SELECT ch.title AS chapter_title, c.title AS course_title
+       FROM chapters ch JOIN courses c ON c.id = ch.course_id
+      WHERE ch.id = ?`,
+    session.chapter_id,
+  ))!;
 
   const expiresAt = parseSqlDate(session.expires_at);
   const secondsRemaining =
@@ -124,7 +133,7 @@ function view(
         : 0;
 
   const concluded = ['EXPIRED', 'ENDED', 'FORFEITED'].includes(session.status);
-  const resolved = unlocked ?? (concluded ? peekNext(userId, session.chapter_id) : null);
+  const resolved = unlocked ?? (concluded ? await peekNext(userId, session.chapter_id) : null);
 
   return {
     id: session.id,
@@ -151,14 +160,17 @@ function view(
   };
 }
 
-function peekNext(userId: string, chapterId: string) {
-  const { chapter, enrollment } = chapterContext(userId, chapterId);
-  const next = db
-    .prepare('SELECT id FROM chapters WHERE course_id = ? AND position = ?')
-    .get(chapter.course_id, chapter.position + 1) as { id: string } | undefined;
-  const enrollmentRow = db.prepare('SELECT status FROM enrollments WHERE id = ?').get(enrollment.id) as {
-    status: string;
-  };
+async function peekNext(userId: string, chapterId: string) {
+  const { chapter, enrollment } = await chapterContext(userId, chapterId);
+  const next = await one<{ id: string }>(
+    'SELECT id FROM chapters WHERE course_id = ? AND position = ?',
+    chapter.course_id,
+    chapter.position + 1,
+  );
+  const enrollmentRow = (await one<{ status: string }>(
+    'SELECT status FROM enrollments WHERE id = ?',
+    enrollment.id,
+  ))!;
   return { nextChapterId: next?.id ?? null, courseCompleted: enrollmentRow.status === 'COMPLETED' };
 }
 
@@ -167,14 +179,14 @@ function peekNext(userId: string, chapterId: string) {
  * read goes through here, so an expired entitlement can never be resumed by a
  * client that simply stops polling.
  */
-export function getRewardSession(userId: string, sessionId: string): RewardView {
-  let session = loadSession(userId, sessionId);
+export async function getRewardSession(userId: string, sessionId: string): Promise<RewardView> {
+  let session = await loadSession(userId, sessionId);
 
   if (session.status === 'ACTIVE') {
     const expiresAt = parseSqlDate(session.expires_at);
     if (expiresAt && expiresAt.getTime() <= Date.now()) {
-      const unlocked = conclude(session, 'EXPIRED');
-      session = loadSession(userId, sessionId);
+      const unlocked = await conclude(session, 'EXPIRED');
+      session = await loadSession(userId, sessionId);
       return view(userId, session, unlocked);
     }
   }
@@ -183,12 +195,12 @@ export function getRewardSession(userId: string, sessionId: string): RewardView 
 }
 
 /** Starts the clock. The expiry is fixed here and never extended. */
-export function startRewardSession(
+export async function startRewardSession(
   userId: string,
   sessionId: string,
   movie: RewardMovieSelection,
-): RewardView {
-  const session = loadSession(userId, sessionId);
+): Promise<RewardView> {
+  const session = await loadSession(userId, sessionId);
 
   if (session.status === 'ACTIVE') return getRewardSession(userId, sessionId);
   if (session.status !== 'GRANTED') {
@@ -198,13 +210,12 @@ export function startRewardSession(
   const startedAt = new Date();
   const expiresAt = new Date(startedAt.getTime() + session.minutes_granted * 60_000);
 
-  transaction(() => {
-    db.prepare(
+  await transaction(async () => {
+    await run(
       `UPDATE reward_sessions
           SET status = 'ACTIVE', started_at = ?, expires_at = ?,
               movie_id = ?, movie_title = ?, movie_source = ?, movie_stream_url = ?, movie_poster = ?
         WHERE id = ?`,
-    ).run(
       toIso(startedAt),
       toIso(expiresAt),
       movie.id,
@@ -215,8 +226,9 @@ export function startRewardSession(
       sessionId,
     );
 
-    const context = chapterContext(userId, session.chapter_id);
-    db.prepare(`UPDATE chapter_progress SET state = 'REWARD_ACTIVE', updated_at = ? WHERE id = ?`).run(
+    const context = await chapterContext(userId, session.chapter_id);
+    await run(
+      `UPDATE chapter_progress SET state = 'REWARD_ACTIVE', updated_at = ? WHERE id = ?`,
       nowIso(),
       context.progress.id,
     );
@@ -226,29 +238,28 @@ export function startRewardSession(
 }
 
 /** Ends a session early; the remaining time is not banked. */
-export function endRewardSession(userId: string, sessionId: string): RewardView {
-  const session = loadSession(userId, sessionId);
+export async function endRewardSession(userId: string, sessionId: string): Promise<RewardView> {
+  const session = await loadSession(userId, sessionId);
   if (['EXPIRED', 'ENDED', 'FORFEITED'].includes(session.status)) {
     return getRewardSession(userId, sessionId);
   }
 
   const status = session.status === 'GRANTED' ? 'FORFEITED' : 'ENDED';
-  const unlocked = conclude(session, status);
-  return view(userId, loadSession(userId, sessionId), unlocked);
+  const unlocked = await conclude(session, status);
+  return view(userId, await loadSession(userId, sessionId), unlocked);
 }
 
-export function listRewardSessions(userId: string) {
-  const rows = db
-    .prepare(
-      `SELECT r.*, ch.title AS chapter_title, c.title AS course_title
-         FROM reward_sessions r
-         JOIN chapters ch ON ch.id = r.chapter_id
-         JOIN courses c ON c.id = ch.course_id
-        WHERE r.user_id = ?
-        ORDER BY r.granted_at DESC
-        LIMIT 50`,
-    )
-    .all(userId) as (RewardSessionRow & { chapter_title: string; course_title: string })[];
+export async function listRewardSessions(userId: string) {
+  const rows = await query<RewardSessionRow & { chapter_title: string; course_title: string }>(
+    `SELECT r.*, ch.title AS chapter_title, c.title AS course_title
+       FROM reward_sessions r
+       JOIN chapters ch ON ch.id = r.chapter_id
+       JOIN courses c ON c.id = ch.course_id
+      WHERE r.user_id = ?
+      ORDER BY r.granted_at DESC
+      LIMIT 50`,
+    userId,
+  );
 
   return rows.map((row) => ({
     id: row.id,
@@ -266,16 +277,15 @@ export function listRewardSessions(userId: string) {
 }
 
 /** The entitlement a learner can act on right now, if any. */
-export function activeReward(userId: string): RewardView | null {
-  const row = db
-    .prepare(
-      `SELECT id FROM reward_sessions
-        WHERE user_id = ? AND status IN ('GRANTED','ACTIVE')
-        ORDER BY granted_at DESC LIMIT 1`,
-    )
-    .get(userId) as { id: string } | undefined;
+export async function activeReward(userId: string): Promise<RewardView | null> {
+  const row = await one<{ id: string }>(
+    `SELECT id FROM reward_sessions
+      WHERE user_id = ? AND status IN ('GRANTED','ACTIVE')
+      ORDER BY granted_at DESC LIMIT 1`,
+    userId,
+  );
   if (!row) return null;
 
-  const session = getRewardSession(userId, row.id);
+  const session = await getRewardSession(userId, row.id);
   return session.concluded ? null : session;
 }

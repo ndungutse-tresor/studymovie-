@@ -1,4 +1,4 @@
-import { db, nowIso, parseSqlDate } from '../db/index.js';
+import { one, nowIso, parseSqlDate, query, run } from '../db/index.js';
 import { id } from '../lib/ids.js';
 import { HttpError } from '../lib/http-error.js';
 import { DAY_NAMES, localParts, zonedToUtc } from '../lib/timezone.js';
@@ -13,7 +13,7 @@ interface ScheduleRow {
   duration_minutes: number;
   reminder_minutes: number;
   active: number;
-  created_at: string;
+  created_at: Date;
 }
 
 export interface ScheduleInput {
@@ -48,10 +48,8 @@ export interface Occurrence {
   acknowledged: boolean;
 }
 
-function loadSchedule(userId: string, scheduleId: string): ScheduleRow {
-  const row = db.prepare('SELECT * FROM study_schedules WHERE id = ?').get(scheduleId) as
-    | ScheduleRow
-    | undefined;
+async function loadSchedule(userId: string, scheduleId: string): Promise<ScheduleRow> {
+  const row = await one<ScheduleRow>('SELECT * FROM study_schedules WHERE id = ?', scheduleId);
   if (!row) throw HttpError.notFound('That schedule entry does not exist.');
   if (row.user_id !== userId) throw HttpError.forbidden('That schedule entry belongs to another learner.');
   return row;
@@ -63,20 +61,19 @@ function parseTime(startTime: string): { hour: number; minute: number } {
   return { hour: Number(match[1]), minute: Number(match[2]) };
 }
 
-export function createSchedule(userId: string, timeZone: string, input: ScheduleInput) {
+export async function createSchedule(userId: string, timeZone: string, input: ScheduleInput) {
   parseTime(input.startTime);
 
   if (input.courseId) {
-    const course = db.prepare('SELECT id FROM courses WHERE id = ?').get(input.courseId);
+    const course = await one('SELECT id FROM courses WHERE id = ?', input.courseId);
     if (!course) throw HttpError.badRequest('That course does not exist.');
   }
 
   const scheduleId = id('sch');
-  db.prepare(
+  await run(
     `INSERT INTO study_schedules
        (id, user_id, course_id, title, day_of_week, start_time, duration_minutes, reminder_minutes, active)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
     scheduleId,
     userId,
     input.courseId ?? null,
@@ -88,24 +85,23 @@ export function createSchedule(userId: string, timeZone: string, input: Schedule
     input.active === false ? 0 : 1,
   );
 
-  return listSchedules(userId, timeZone).find((entry) => entry.id === scheduleId)!;
+  return (await listSchedules(userId, timeZone)).find((entry) => entry.id === scheduleId)!;
 }
 
-export function updateSchedule(
+export async function updateSchedule(
   userId: string,
   timeZone: string,
   scheduleId: string,
   input: Partial<ScheduleInput>,
 ) {
-  const existing = loadSchedule(userId, scheduleId);
+  const existing = await loadSchedule(userId, scheduleId);
   if (input.startTime) parseTime(input.startTime);
 
-  db.prepare(
+  await run(
     `UPDATE study_schedules
         SET title = ?, day_of_week = ?, start_time = ?, duration_minutes = ?,
             reminder_minutes = ?, course_id = ?, active = ?
       WHERE id = ?`,
-  ).run(
     input.title?.trim() ?? existing.title,
     input.dayOfWeek ?? existing.day_of_week,
     input.startTime ?? existing.start_time,
@@ -116,25 +112,24 @@ export function updateSchedule(
     scheduleId,
   );
 
-  return listSchedules(userId, timeZone).find((entry) => entry.id === scheduleId)!;
+  return (await listSchedules(userId, timeZone)).find((entry) => entry.id === scheduleId)!;
 }
 
-export function deleteSchedule(userId: string, scheduleId: string) {
-  loadSchedule(userId, scheduleId);
-  db.prepare('DELETE FROM study_schedules WHERE id = ?').run(scheduleId);
+export async function deleteSchedule(userId: string, scheduleId: string) {
+  await loadSchedule(userId, scheduleId);
+  await run('DELETE FROM study_schedules WHERE id = ?', scheduleId);
   return { id: scheduleId, deleted: true };
 }
 
-export function listSchedules(userId: string, timeZone: string) {
-  const rows = db
-    .prepare(
-      `SELECT s.*, c.title AS course_title
-         FROM study_schedules s
-         LEFT JOIN courses c ON c.id = s.course_id
-        WHERE s.user_id = ?
-        ORDER BY s.day_of_week, s.start_time`,
-    )
-    .all(userId) as (ScheduleRow & { course_title: string | null })[];
+export async function listSchedules(userId: string, timeZone: string) {
+  const rows = await query<ScheduleRow & { course_title: string | null }>(
+    `SELECT s.*, c.title AS course_title
+       FROM study_schedules s
+       LEFT JOIN courses c ON c.id = s.course_id
+      WHERE s.user_id = ?
+      ORDER BY s.day_of_week, s.start_time`,
+    userId,
+  );
 
   return rows.map((row) => {
     const next = nextOccurrence(row, timeZone);
@@ -177,23 +172,27 @@ function nextOccurrence(row: ScheduleRow, timeZone: string, from = new Date()): 
  * currently due. The client polls this and raises the alert, so a learner who
  * has the tab open is notified without a push subscription.
  */
-export function upcomingOccurrences(userId: string, timeZone: string, horizonDays = 7): Occurrence[] {
-  const rows = db
-    .prepare(
-      `SELECT s.*, c.title AS course_title
-         FROM study_schedules s
-         LEFT JOIN courses c ON c.id = s.course_id
-        WHERE s.user_id = ? AND s.active = 1`,
-    )
-    .all(userId) as (ScheduleRow & { course_title: string | null })[];
+export async function upcomingOccurrences(
+  userId: string,
+  timeZone: string,
+  horizonDays = 7,
+): Promise<Occurrence[]> {
+  const rows = await query<ScheduleRow & { course_title: string | null }>(
+    `SELECT s.*, c.title AS course_title
+       FROM study_schedules s
+       LEFT JOIN courses c ON c.id = s.course_id
+      WHERE s.user_id = ? AND s.active = 1`,
+    userId,
+  );
 
   const now = Date.now();
   const horizon = now + horizonDays * 86_400_000;
   const acknowledged = new Set(
     (
-      db
-        .prepare('SELECT occurrence FROM schedule_alerts WHERE user_id = ? AND acknowledged_at IS NOT NULL')
-        .all(userId) as { occurrence: string }[]
+      await query<{ occurrence: string }>(
+        'SELECT occurrence FROM schedule_alerts WHERE user_id = ? AND acknowledged_at IS NOT NULL',
+        userId,
+      )
     ).map((row) => row.occurrence),
   );
 
@@ -239,31 +238,39 @@ export function upcomingOccurrences(userId: string, timeZone: string, horizonDay
 }
 
 /** Silences one occurrence so the alert does not reappear on the next poll. */
-export function acknowledgeAlert(userId: string, scheduleId: string, occurrenceIso: string) {
-  loadSchedule(userId, scheduleId);
+export async function acknowledgeAlert(userId: string, scheduleId: string, occurrenceIso: string) {
+  await loadSchedule(userId, scheduleId);
   const key = `${scheduleId}:${occurrenceIso}`;
 
-  db.prepare(
+  await run(
     `INSERT INTO schedule_alerts (id, schedule_id, user_id, occurrence, acknowledged_at)
      VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(schedule_id, occurrence) DO UPDATE SET acknowledged_at = excluded.acknowledged_at`,
-  ).run(id('alr'), scheduleId, userId, key, nowIso());
+     ON CONFLICT (schedule_id, occurrence) DO UPDATE SET acknowledged_at = excluded.acknowledged_at`,
+    id('alr'),
+    scheduleId,
+    userId,
+    key,
+    nowIso(),
+  );
 
   return { scheduleId, occurrence: occurrenceIso, acknowledged: true };
 }
 
 /** A sensible starter routine created alongside a new account. */
-export function seedDefaultSchedule(userId: string, courseId: string | null, weeklyHours: number) {
+export async function seedDefaultSchedule(
+  userId: string,
+  courseId: string | null,
+  weeklyHours: number,
+): Promise<void> {
   const sessionsPerWeek = Math.max(2, Math.min(5, Math.round(weeklyHours / 1.5)));
   const preferredDays = [1, 3, 5, 2, 6];
   const durationMinutes = Math.max(45, Math.min(120, Math.round((weeklyHours * 60) / sessionsPerWeek)));
 
   for (let index = 0; index < sessionsPerWeek; index += 1) {
-    db.prepare(
+    await run(
       `INSERT INTO study_schedules
          (id, user_id, course_id, title, day_of_week, start_time, duration_minutes, reminder_minutes, active)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-    ).run(
       id('sch'),
       userId,
       courseId,
@@ -274,8 +281,4 @@ export function seedDefaultSchedule(userId: string, courseId: string | null, wee
       15,
     );
   }
-}
-
-export function parseSqlDateIso(value: string | null): string | null {
-  return parseSqlDate(value)?.toISOString() ?? null;
 }

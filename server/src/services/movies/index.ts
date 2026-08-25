@@ -1,5 +1,5 @@
 import { config } from '../../config.js';
-import { db, nowIso, parseSqlDate } from '../../db/index.js';
+import { one, nowIso, parseSqlDate, query, run } from '../../db/index.js';
 import { id as newId } from '../../lib/ids.js';
 import { HttpError } from '../../lib/http-error.js';
 import { fetchArchiveMovies } from './archive.js';
@@ -19,7 +19,7 @@ interface PreferenceRow {
   source: string | null;
   year: number | null;
   payload: string;
-  created_at: string;
+  created_at: Date;
 }
 
 // ---------------------------------------------------------------------------
@@ -30,10 +30,11 @@ function cacheKey(query: MovieQuery): string {
   return `movies:${query.search ?? ''}:${query.genre ?? ''}:${query.limit ?? 60}`;
 }
 
-function readCache(key: string): Movie[] | null {
-  const row = db.prepare('SELECT payload, fetched_at FROM movie_cache WHERE cache_key = ?').get(key) as
-    | { payload: string; fetched_at: string }
-    | undefined;
+async function readCache(key: string): Promise<Movie[] | null> {
+  const row = await one<{ payload: string; fetched_at: Date }>(
+    'SELECT payload, fetched_at FROM movie_cache WHERE cache_key = ?',
+    key,
+  );
   if (!row) return null;
 
   const fetchedAt = parseSqlDate(row.fetched_at);
@@ -49,11 +50,14 @@ function readCache(key: string): Movie[] | null {
   }
 }
 
-function writeCache(key: string, movies: Movie[]): void {
-  db.prepare(
+async function writeCache(key: string, movies: Movie[]): Promise<void> {
+  await run(
     `INSERT INTO movie_cache (cache_key, payload, fetched_at) VALUES (?, ?, ?)
-     ON CONFLICT(cache_key) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
-  ).run(key, JSON.stringify(movies), nowIso());
+     ON CONFLICT (cache_key) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
+    key,
+    JSON.stringify(movies),
+    nowIso(),
+  );
 }
 
 function dedupe(movies: Movie[]): Movie[] {
@@ -102,7 +106,7 @@ export interface AggregateResult {
  */
 export async function aggregateMovies(query: MovieQuery = {}): Promise<AggregateResult> {
   const key = cacheKey(query);
-  const cached = readCache(key);
+  const cached = await readCache(key);
   if (cached) {
     return {
       movies: cached,
@@ -158,7 +162,7 @@ export async function aggregateMovies(query: MovieQuery = {}): Promise<Aggregate
   // Only cache a result that included at least one live source, so a transient
   // outage does not pin the catalogue-only view for the whole TTL.
   if (sources.some((source) => source.status === 'ok' && source.name !== 'Bundled catalogue')) {
-    writeCache(key, movies);
+    await writeCache(key, movies);
   }
 
   return { movies, sources, fromCache: false };
@@ -174,19 +178,18 @@ export function availableGenres(movies: Movie[]): string[] {
 // Per-learner decisions: watch later, decline, watched
 // ---------------------------------------------------------------------------
 
-export function recordDecision(userId: string, movie: Movie, decision: Decision) {
-  db.prepare(
+export async function recordDecision(userId: string, movie: Movie, decision: Decision) {
+  await run(
     `INSERT INTO movie_preferences (id, user_id, movie_id, decision, title, poster_url, source, year, payload)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(user_id, movie_id) DO UPDATE SET
+     ON CONFLICT (user_id, movie_id) DO UPDATE SET
        decision = excluded.decision,
        title = excluded.title,
        poster_url = excluded.poster_url,
        source = excluded.source,
        year = excluded.year,
        payload = excluded.payload,
-       created_at = datetime('now')`,
-  ).run(
+       created_at = now()`,
     newId('mpf'),
     userId,
     movie.id,
@@ -201,22 +204,27 @@ export function recordDecision(userId: string, movie: Movie, decision: Decision)
   return { movieId: movie.id, decision };
 }
 
-export function clearDecision(userId: string, movieId: string) {
-  const result = db
-    .prepare('DELETE FROM movie_preferences WHERE user_id = ? AND movie_id = ?')
-    .run(userId, movieId);
-  if (result.changes === 0) throw HttpError.notFound('That title is not on your list.');
+export async function clearDecision(userId: string, movieId: string) {
+  const removed = await run(
+    'DELETE FROM movie_preferences WHERE user_id = ? AND movie_id = ?',
+    userId,
+    movieId,
+  );
+  if (removed === 0) throw HttpError.notFound('That title is not on your list.');
   return { movieId, removed: true };
 }
 
-export function listDecisions(userId: string, decision?: Decision) {
+export async function listDecisions(userId: string, decision?: Decision) {
   const rows = decision
-    ? (db
-        .prepare('SELECT * FROM movie_preferences WHERE user_id = ? AND decision = ? ORDER BY created_at DESC')
-        .all(userId, decision) as PreferenceRow[])
-    : (db
-        .prepare('SELECT * FROM movie_preferences WHERE user_id = ? ORDER BY created_at DESC')
-        .all(userId) as PreferenceRow[]);
+    ? await query<PreferenceRow>(
+        'SELECT * FROM movie_preferences WHERE user_id = ? AND decision = ? ORDER BY created_at DESC',
+        userId,
+        decision,
+      )
+    : await query<PreferenceRow>(
+        'SELECT * FROM movie_preferences WHERE user_id = ? ORDER BY created_at DESC',
+        userId,
+      );
 
   return rows.map((row) => {
     let movie: Movie | null = null;
@@ -238,10 +246,11 @@ export function listDecisions(userId: string, decision?: Decision) {
   });
 }
 
-export function decisionMap(userId: string): Map<string, Decision> {
-  const rows = db
-    .prepare('SELECT movie_id, decision FROM movie_preferences WHERE user_id = ?')
-    .all(userId) as { movie_id: string; decision: Decision }[];
+export async function decisionMap(userId: string): Promise<Map<string, Decision>> {
+  const rows = await query<{ movie_id: string; decision: Decision }>(
+    'SELECT movie_id, decision FROM movie_preferences WHERE user_id = ?',
+    userId,
+  );
   return new Map(rows.map((row) => [row.movie_id, row.decision]));
 }
 

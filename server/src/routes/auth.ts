@@ -29,53 +29,53 @@ const loginSchema = z.object({
 authRouter.post(
   '/register',
   authLimiter,
-  asyncHandler((req, res) => {
+  asyncHandler(async (req, res) => {
     const input = registerSchema.parse(req.body);
-    res.status(201).json(auth.register(input));
+    res.status(201).json(await auth.register(input));
   }),
 );
 
 authRouter.post(
   '/login',
   authLimiter,
-  asyncHandler((req, res) => {
+  asyncHandler(async (req, res) => {
     const { email, password } = loginSchema.parse(req.body);
-    res.json(auth.login(email, password));
+    res.json(await auth.login(email, password));
   }),
 );
 
 authRouter.post(
   '/refresh',
-  asyncHandler((req, res) => {
+  asyncHandler(async (req, res) => {
     const { refreshToken } = z.object({ refreshToken: z.string().min(10) }).parse(req.body);
-    res.json(auth.refresh(refreshToken));
+    res.json(await auth.refresh(refreshToken));
   }),
 );
 
 authRouter.post(
   '/logout',
-  asyncHandler((req, res) => {
+  asyncHandler(async (req, res) => {
     const { refreshToken } = z.object({ refreshToken: z.string().optional() }).parse(req.body ?? {});
-    res.json(auth.logout(refreshToken));
+    res.json(await auth.logout(refreshToken));
   }),
 );
 
 authRouter.get(
   '/me',
   requireAuth,
-  asyncHandler((req, res) => {
-    res.json({ user: auth.currentUser(req.user!.id) });
+  asyncHandler(async (req, res) => {
+    res.json({ user: await auth.currentUser(req.user!.id) });
   }),
 );
 
 authRouter.patch(
   '/me',
   requireAuth,
-  asyncHandler((req, res) => {
+  asyncHandler(async (req, res) => {
     const input = z
       .object({ fullName: z.string().trim().min(2).optional(), timezone: z.string().trim().optional() })
       .parse(req.body);
-    res.json({ user: auth.updateProfile(req.user!.id, input) });
+    res.json({ user: await auth.updateProfile(req.user!.id, input) });
   }),
 );
 
@@ -83,10 +83,10 @@ authRouter.post(
   '/password',
   requireAuth,
   authLimiter,
-  asyncHandler((req, res) => {
+  asyncHandler(async (req, res) => {
     const input = z
       .object({ currentPassword: z.string().min(1), newPassword: z.string().min(10) })
       .parse(req.body);
-    res.json(auth.changePassword(req.user!.id, input.currentPassword, input.newPassword));
+    res.json(await auth.changePassword(req.user!.id, input.currentPassword, input.newPassword));
   }),
 );

@@ -1,4 +1,4 @@
-import { db, parseSqlDate } from '../db/index.js';
+import { one, parseSqlDate, query } from '../db/index.js';
 import { HttpError } from '../lib/http-error.js';
 import type { ProgressState } from './progression.js';
 
@@ -36,45 +36,45 @@ function shapeCourse<T extends Record<string, unknown>>(row: CourseRow, extra: T
   };
 }
 
-export function listCourses(userId?: string) {
-  const rows = db
-    .prepare('SELECT * FROM courses WHERE published = 1 ORDER BY position')
-    .all() as CourseRow[];
+export async function listCourses(userId?: string) {
+  const rows = await query<CourseRow>('SELECT * FROM courses WHERE published = 1 ORDER BY position');
 
   const chapterCounts = new Map(
     (
-      db
-        .prepare('SELECT course_id, COUNT(*) AS n FROM chapters GROUP BY course_id')
-        .all() as { course_id: string; n: number }[]
+      await query<{ course_id: string; n: number }>(
+        'SELECT course_id, COUNT(*) AS n FROM chapters GROUP BY course_id',
+      )
     ).map((row) => [row.course_id, row.n]),
   );
 
-  const enrolled = new Map<string, { enrollmentId: string; completed: number; total: number; status: string }>();
+  const enrolled = new Map<
+    string,
+    { enrollmentId: string; completed: number; total: number; status: string }
+  >();
 
   if (userId) {
-    const progressRows = db
-      .prepare(
-        `SELECT e.id AS enrollment_id, e.course_id, e.status,
-                SUM(CASE WHEN p.state = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
-                COUNT(p.id) AS total
-           FROM enrollments e
-           LEFT JOIN chapter_progress p ON p.enrollment_id = e.id
-          WHERE e.user_id = ?
-          GROUP BY e.id`,
-      )
-      .all(userId) as {
+    const progressRows = await query<{
       enrollment_id: string;
       course_id: string;
       status: string;
       completed: number;
       total: number;
-    }[];
+    }>(
+      `SELECT e.id AS enrollment_id, e.course_id, e.status,
+              SUM(CASE WHEN p.state = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
+              COUNT(p.id) AS total
+         FROM enrollments e
+         LEFT JOIN chapter_progress p ON p.enrollment_id = e.id
+        WHERE e.user_id = ?
+        GROUP BY e.id, e.course_id, e.status`,
+      userId,
+    );
 
     for (const row of progressRows) {
       enrolled.set(row.course_id, {
         enrollmentId: row.enrollment_id,
-        completed: row.completed ?? 0,
-        total: row.total ?? 0,
+        completed: Number(row.completed ?? 0),
+        total: Number(row.total ?? 0),
         status: row.status,
       });
     }
@@ -94,18 +94,11 @@ export function listCourses(userId?: string) {
   });
 }
 
-export function getCourse(slug: string, userId?: string) {
-  const row = db.prepare('SELECT * FROM courses WHERE slug = ? AND published = 1').get(slug) as
-    | CourseRow
-    | undefined;
+export async function getCourse(slug: string, userId?: string) {
+  const row = await one<CourseRow>('SELECT * FROM courses WHERE slug = ? AND published = 1', slug);
   if (!row) throw HttpError.notFound('That course does not exist.');
 
-  const chapters = db
-    .prepare(
-      `SELECT id, position, title, summary, estimated_minutes, pass_mark, reward_minutes
-         FROM chapters WHERE course_id = ? ORDER BY position`,
-    )
-    .all(row.id) as {
+  const chapters = await query<{
     id: string;
     position: number;
     title: string;
@@ -113,17 +106,20 @@ export function getCourse(slug: string, userId?: string) {
     estimated_minutes: number;
     pass_mark: number;
     reward_minutes: number;
-  }[];
+  }>(
+    `SELECT id, position, title, summary, estimated_minutes, pass_mark, reward_minutes
+       FROM chapters WHERE course_id = ? ORDER BY position`,
+    row.id,
+  );
 
   const questionCounts = new Map(
     (
-      db
-        .prepare(
-          `SELECT chapter_id, COUNT(*) AS n FROM questions
-            WHERE chapter_id IN (SELECT id FROM chapters WHERE course_id = ?)
-            GROUP BY chapter_id`,
-        )
-        .all(row.id) as { chapter_id: string; n: number }[]
+      await query<{ chapter_id: string; n: number }>(
+        `SELECT chapter_id, COUNT(*) AS n FROM questions
+          WHERE chapter_id IN (SELECT id FROM chapters WHERE course_id = ?)
+          GROUP BY chapter_id`,
+        row.id,
+      )
     ).map((entry) => [entry.chapter_id, entry.n]),
   );
 
@@ -136,11 +132,12 @@ export function getCourse(slug: string, userId?: string) {
   >();
 
   if (userId) {
-    const enrollmentRow = db
-      .prepare('SELECT * FROM enrollments WHERE user_id = ? AND course_id = ?')
-      .get(userId, row.id) as
-      | { id: string; status: string; created_at: string; completed_at: string | null }
-      | undefined;
+    const enrollmentRow = await one<{
+      id: string;
+      status: string;
+      created_at: Date;
+      completed_at: Date | null;
+    }>('SELECT * FROM enrollments WHERE user_id = ? AND course_id = ?', userId, row.id);
 
     if (enrollmentRow) {
       enrollment = {
@@ -150,15 +147,13 @@ export function getCourse(slug: string, userId?: string) {
         completedAt: parseSqlDate(enrollmentRow.completed_at)?.toISOString() ?? null,
       };
 
-      const progressRows = db
-        .prepare('SELECT * FROM chapter_progress WHERE enrollment_id = ?')
-        .all(enrollmentRow.id) as {
+      const progressRows = await query<{
         chapter_id: string;
         state: ProgressState;
         attempts: number;
         best_score: number;
-        completed_at: string | null;
-      }[];
+        completed_at: Date | null;
+      }>('SELECT * FROM chapter_progress WHERE enrollment_id = ?', enrollmentRow.id);
 
       for (const entry of progressRows) {
         progressByChapter.set(entry.chapter_id, {
@@ -189,46 +184,52 @@ export function getCourse(slug: string, userId?: string) {
 }
 
 /** Chapter reading view. Content is only released once the chapter is unlocked. */
-export function getChapter(userId: string, chapterId: string) {
-  const chapter = db.prepare('SELECT * FROM chapters WHERE id = ?').get(chapterId) as
-    | {
-        id: string;
-        course_id: string;
-        position: number;
-        title: string;
-        summary: string;
-        content: string;
-        estimated_minutes: number;
-        pass_mark: number;
-        reward_minutes: number;
-      }
-    | undefined;
+export async function getChapter(userId: string, chapterId: string) {
+  const chapter = await one<{
+    id: string;
+    course_id: string;
+    position: number;
+    title: string;
+    summary: string;
+    content: string;
+    estimated_minutes: number;
+    pass_mark: number;
+    reward_minutes: number;
+  }>('SELECT * FROM chapters WHERE id = ?', chapterId);
   if (!chapter) throw HttpError.notFound('That chapter does not exist.');
 
-  const course = db.prepare('SELECT id, slug, title, level FROM courses WHERE id = ?').get(
+  const course = (await one<{ id: string; slug: string; title: string; level: string }>(
+    'SELECT id, slug, title, level FROM courses WHERE id = ?',
     chapter.course_id,
-  ) as { id: string; slug: string; title: string; level: string };
+  ))!;
 
-  const enrollment = db
-    .prepare('SELECT id FROM enrollments WHERE user_id = ? AND course_id = ?')
-    .get(userId, chapter.course_id) as { id: string } | undefined;
+  const enrollment = await one<{ id: string }>(
+    'SELECT id FROM enrollments WHERE user_id = ? AND course_id = ?',
+    userId,
+    chapter.course_id,
+  );
   if (!enrollment) throw HttpError.forbidden('Enroll in this course to read its chapters.');
 
-  const progress = db
-    .prepare('SELECT * FROM chapter_progress WHERE enrollment_id = ? AND chapter_id = ?')
-    .get(enrollment.id, chapter.id) as { state: ProgressState; attempts: number; best_score: number };
+  const progress = (await one<{ state: ProgressState; attempts: number; best_score: number }>(
+    'SELECT * FROM chapter_progress WHERE enrollment_id = ? AND chapter_id = ?',
+    enrollment.id,
+    chapter.id,
+  ))!;
 
   if (progress.state === 'LOCKED') {
     throw HttpError.forbidden('Pass the previous chapter exam to unlock this chapter.');
   }
 
-  const questionCount = (
-    db.prepare('SELECT COUNT(*) AS n FROM questions WHERE chapter_id = ?').get(chapter.id) as { n: number }
-  ).n;
+  const questionCount = (await one<{ n: number }>(
+    'SELECT COUNT(*) AS n FROM questions WHERE chapter_id = ?',
+    chapter.id,
+  ))!.n;
 
-  const next = db
-    .prepare('SELECT id, title FROM chapters WHERE course_id = ? AND position = ?')
-    .get(chapter.course_id, chapter.position + 1) as { id: string; title: string } | undefined;
+  const next = await one<{ id: string; title: string }>(
+    'SELECT id, title FROM chapters WHERE course_id = ? AND position = ?',
+    chapter.course_id,
+    chapter.position + 1,
+  );
 
   return {
     id: chapter.id,
@@ -248,10 +249,8 @@ export function getChapter(userId: string, chapterId: string) {
   };
 }
 
-export function courseIdFromSlug(slug: string): string {
-  const row = db.prepare('SELECT id FROM courses WHERE slug = ? AND published = 1').get(slug) as
-    | { id: string }
-    | undefined;
+export async function courseIdFromSlug(slug: string): Promise<string> {
+  const row = await one<{ id: string }>('SELECT id FROM courses WHERE slug = ? AND published = 1', slug);
   if (!row) throw HttpError.notFound('That course does not exist.');
   return row.id;
 }

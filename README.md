@@ -78,7 +78,8 @@ response rather than thrown, and the UI shows each source's live status.
 
 ```bash
 npm install
-cp .env.example .env      # optional in development
+cp .env.example .env      # set DATABASE_URL to your Postgres instance
+npm run db:setup          # apply the schema, then seed the catalog
 npm run dev               # API on :4000, client on :5173
 ```
 
@@ -95,9 +96,32 @@ MIN_STUDY_SECONDS=10 npm run dev
 ```bash
 npm run build       # typecheck + build both workspaces
 npm run start       # run the built API
+npm run migrate     # apply the schema (idempotent)
 npm run seed        # re-seed the catalog (idempotent)
 npm run typecheck   # strict typecheck, server and client
 ```
+
+## Deployment
+
+The repository deploys to Vercel as a single project: the Vite bundle is served
+statically and the Express application runs as a serverless function behind
+`/api/**`, so both halves share one origin and there is no CORS to configure.
+
+`vercel-build` compiles the server, applies the schema, seeds the catalog, then
+builds the client — so a deployment always lands with its content in sync.
+
+Required environment variables:
+
+| Variable | Notes |
+|---|---|
+| `DATABASE_URL` | Postgres connection string. Use a **pooled** endpoint on serverless. |
+| `JWT_ACCESS_SECRET` | 32+ random bytes, hex. Required in production. |
+| `JWT_REFRESH_SECRET` | As above, and different from the access secret. |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Seeded administrator. Change before going live. |
+| `TMDB_API_KEY` | Optional; enables the TMDB metadata provider. |
+
+`DATABASE_POOL_MAX` defaults to 1 when `VERCEL` is set, because each serverless
+instance holds its own pool and the database's connection budget is shared.
 
 A seeded administrator account is created on first run from `ADMIN_EMAIL` /
 `ADMIN_PASSWORD`. **Change the password before deploying anywhere real.**
@@ -107,8 +131,9 @@ A seeded administrator account is created on first run from `ADMIN_EMAIL` /
 ## Architecture
 
 ```
-server/                     Express + TypeScript + SQLite (better-sqlite3)
+server/                     Express + TypeScript + PostgreSQL (node-postgres)
   src/config.ts             Validated configuration; fails fast in production
+  src/db/index.ts           Async pool, `?` placeholder translation, transactions
   src/db/schema.sql         Full schema with foreign keys and check constraints
   src/db/content/courses/   Course content as typed data
   src/services/
@@ -134,6 +159,10 @@ client/                     React 18 + Vite + TypeScript + Tailwind
 cool-down, and the viewing clock are all enforced in the API. The client's
 countdowns are display only, and reconcile with the server every 15 seconds
 during a viewing session.
+
+**Transactions survive helper nesting.** The Postgres client for an open
+transaction is held in `AsyncLocalStorage`, so nested service calls join it
+automatically rather than needing a client threaded through every signature.
 
 **Reward sessions expire lazily but reliably.** Rather than a background job,
 every read of a session checks its expiry first and concludes it if the window

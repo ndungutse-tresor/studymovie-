@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { db } from '../db/index.js';
+import { one } from '../db/index.js';
 import { HttpError } from '../lib/http-error.js';
 import { verifyAccessToken } from '../lib/tokens.js';
 
@@ -26,28 +26,35 @@ function readBearer(req: Request): string | null {
   return null;
 }
 
-export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
-  const token = readBearer(req);
-  if (!token) return next(HttpError.unauthorized());
+export async function requireAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  try {
+    const token = readBearer(req);
+    if (!token) return next(HttpError.unauthorized());
 
-  const payload = verifyAccessToken(token);
-  const row = db
-    .prepare('SELECT id, email, full_name, role, timezone, status FROM users WHERE id = ?')
-    .get(payload.sub) as
-    | { id: string; email: string; full_name: string; role: 'LEARNER' | 'ADMIN'; timezone: string; status: string }
-    | undefined;
+    const payload = verifyAccessToken(token);
+    const row = await one<{
+      id: string;
+      email: string;
+      full_name: string;
+      role: 'LEARNER' | 'ADMIN';
+      timezone: string;
+      status: string;
+    }>('SELECT id, email, full_name, role, timezone, status FROM users WHERE id = ?', payload.sub);
 
-  if (!row) return next(HttpError.unauthorized('Account no longer exists.'));
-  if (row.status !== 'ACTIVE') return next(HttpError.forbidden('This account is suspended.'));
+    if (!row) return next(HttpError.unauthorized('Account no longer exists.'));
+    if (row.status !== 'ACTIVE') return next(HttpError.forbidden('This account is suspended.'));
 
-  req.user = {
-    id: row.id,
-    email: row.email,
-    fullName: row.full_name,
-    role: row.role,
-    timezone: row.timezone,
-  };
-  next();
+    req.user = {
+      id: row.id,
+      email: row.email,
+      fullName: row.full_name,
+      role: row.role,
+      timezone: row.timezone,
+    };
+    next();
+  } catch (error) {
+    next(error);
+  }
 }
 
 export function requireAdmin(req: Request, _res: Response, next: NextFunction): void {

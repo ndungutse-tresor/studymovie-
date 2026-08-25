@@ -1,4 +1,4 @@
-import { db, nowIso } from '../db/index.js';
+import { one, nowIso, run } from '../db/index.js';
 import { accessCode, id } from '../lib/ids.js';
 import { HttpError } from '../lib/http-error.js';
 
@@ -120,10 +120,11 @@ export function screen(input: ApplicationInput): ReviewOutcome {
   };
 }
 
-export function submitApplication(input: ApplicationInput): ApplicationRecord {
-  const existing = db
-    .prepare('SELECT * FROM applications WHERE email = ?')
-    .get(input.email.toLowerCase()) as ApplicationRecord | undefined;
+export async function submitApplication(input: ApplicationInput): Promise<ApplicationRecord> {
+  const existing = await one<ApplicationRecord>(
+    'SELECT * FROM applications WHERE email = ?',
+    input.email.toLowerCase(),
+  );
 
   if (existing) {
     if (existing.status === 'ENROLLED') {
@@ -138,11 +139,10 @@ export function submitApplication(input: ApplicationInput): ApplicationRecord {
   const outcome = screen(input);
   const applicationId = id('app');
 
-  db.prepare(
+  await run(
     `INSERT INTO applications
        (id, full_name, email, phone, country, track, experience_level, weekly_hours, motivation, status, access_code, review_note, reviewed_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
     applicationId,
     input.fullName.trim(),
     input.email.toLowerCase(),
@@ -161,41 +161,43 @@ export function submitApplication(input: ApplicationInput): ApplicationRecord {
   return getApplication(applicationId);
 }
 
-export function getApplication(applicationId: string): ApplicationRecord {
-  const record = db.prepare('SELECT * FROM applications WHERE id = ?').get(applicationId) as
-    | ApplicationRecord
-    | undefined;
+export async function getApplication(applicationId: string): Promise<ApplicationRecord> {
+  const record = await one<ApplicationRecord>('SELECT * FROM applications WHERE id = ?', applicationId);
   if (!record) throw HttpError.notFound('No application matches that reference.');
   return record;
 }
 
-export function findApplicationByEmail(email: string): ApplicationRecord | undefined {
-  return db.prepare('SELECT * FROM applications WHERE email = ?').get(email.toLowerCase()) as
-    | ApplicationRecord
-    | undefined;
+export function findApplicationByEmail(email: string): Promise<ApplicationRecord | undefined> {
+  return one<ApplicationRecord>('SELECT * FROM applications WHERE email = ?', email.toLowerCase());
 }
 
-export function findApplicationByAccessCode(code: string): ApplicationRecord | undefined {
-  return db.prepare('SELECT * FROM applications WHERE access_code = ?').get(code.trim().toUpperCase()) as
-    | ApplicationRecord
-    | undefined;
+export function findApplicationByAccessCode(code: string): Promise<ApplicationRecord | undefined> {
+  return one<ApplicationRecord>(
+    'SELECT * FROM applications WHERE access_code = ?',
+    code.trim().toUpperCase(),
+  );
 }
 
-export function decideApplication(
+export async function decideApplication(
   applicationId: string,
   decision: 'APPROVED' | 'REJECTED',
   note: string,
-): ApplicationRecord {
-  const application = getApplication(applicationId);
+): Promise<ApplicationRecord> {
+  const application = await getApplication(applicationId);
   if (application.status === 'ENROLLED') {
     throw HttpError.conflict('This application has already been converted into an account.');
   }
 
-  db.prepare(
+  await run(
     `UPDATE applications
         SET status = ?, review_note = ?, reviewed_at = ?, access_code = COALESCE(access_code, ?)
       WHERE id = ?`,
-  ).run(decision, note, nowIso(), decision === 'APPROVED' ? accessCode() : null, applicationId);
+    decision,
+    note,
+    nowIso(),
+    decision === 'APPROVED' ? accessCode() : null,
+    applicationId,
+  );
 
   return getApplication(applicationId);
 }

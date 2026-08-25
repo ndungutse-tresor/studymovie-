@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import { db, nowIso, parseSqlDate, toIso, transaction } from '../db/index.js';
+import { one, nowIso, parseSqlDate, run, toIso, transaction } from '../db/index.js';
 import { id, randomToken, sha256 } from '../lib/ids.js';
 import { HttpError } from '../lib/http-error.js';
 import { hashPassword, passwordIssues, verifyPassword } from '../lib/passwords.js';
@@ -49,13 +49,12 @@ function publicUser(row: UserRow) {
   };
 }
 
-function issueTokens(user: UserRow): SessionTokens {
+async function issueTokens(user: UserRow): Promise<SessionTokens> {
   const accessToken = signAccessToken({ sub: user.id, email: user.email, role: user.role });
   const refreshToken = randomToken();
 
-  db.prepare(
+  await run(
     'INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)',
-  ).run(
     id('rft'),
     user.id,
     sha256(refreshToken),
@@ -69,17 +68,17 @@ function issueTokens(user: UserRow): SessionTokens {
  * Converts an approved application into an account. The access code issued at
  * admission is the only route in — registration is not open to the public.
  */
-export function register(input: {
+export async function register(input: {
   accessCode: string;
   password: string;
   timezone?: string;
-}): AuthResult {
+}): Promise<AuthResult> {
   const issues = passwordIssues(input.password);
   if (issues.length > 0) {
     throw HttpError.badRequest(`Your password needs ${issues.join(', ')}.`);
   }
 
-  const application = findApplicationByAccessCode(input.accessCode);
+  const application = await findApplicationByAccessCode(input.accessCode);
   if (!application) throw HttpError.badRequest('That access code is not recognised.');
   if (application.status === 'ENROLLED') {
     throw HttpError.conflict('This access code has already been used. Sign in instead.');
@@ -90,12 +89,11 @@ export function register(input: {
 
   const timezone = input.timezone && isValidTimeZone(input.timezone) ? input.timezone : 'UTC';
 
-  return transaction(() => {
+  return transaction(async () => {
     const userId = id('usr');
-    db.prepare(
+    await run(
       `INSERT INTO users (id, application_id, full_name, email, password_hash, role, timezone)
        VALUES (?, ?, ?, ?, ?, 'LEARNER', ?)`,
-    ).run(
       userId,
       application.id,
       application.full_name,
@@ -104,38 +102,35 @@ export function register(input: {
       timezone,
     );
 
-    db.prepare(`UPDATE applications SET status = 'ENROLLED' WHERE id = ?`).run(application.id);
+    await run(`UPDATE applications SET status = 'ENROLLED' WHERE id = ?`, application.id);
 
     // Admission carries an automatic enrolment into the track's entry course,
     // so a new learner lands on a dashboard with work already available.
     const slug = starterCourseSlug(application.track as Track, application.experience_level as Level);
-    const course = db.prepare('SELECT id FROM courses WHERE slug = ?').get(slug) as
-      | { id: string }
-      | undefined;
+    const course = await one<{ id: string }>('SELECT id FROM courses WHERE slug = ?', slug);
 
     if (course) {
-      enroll(userId, course.id);
-      seedDefaultSchedule(userId, course.id, application.weekly_hours);
+      await enroll(userId, course.id);
+      await seedDefaultSchedule(userId, course.id, application.weekly_hours);
     } else {
-      seedDefaultSchedule(userId, null, application.weekly_hours);
+      await seedDefaultSchedule(userId, null, application.weekly_hours);
     }
 
-    db.prepare('INSERT INTO audit_log (id, user_id, action, detail) VALUES (?, ?, ?, ?)').run(
+    await run(
+      'INSERT INTO audit_log (id, user_id, action, detail) VALUES (?, ?, ?, ?)',
       id('aud'),
       userId,
       'account.created',
       JSON.stringify({ applicationId: application.id, track: application.track }),
     );
 
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as UserRow;
-    return { ...issueTokens(user), user: publicUser(user) };
+    const user = (await one<UserRow>('SELECT * FROM users WHERE id = ?', userId))!;
+    return { ...(await issueTokens(user)), user: publicUser(user) };
   });
 }
 
-export function login(email: string, password: string): AuthResult {
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase()) as
-    | UserRow
-    | undefined;
+export async function login(email: string, password: string): Promise<AuthResult> {
+  const user = await one<UserRow>('SELECT * FROM users WHERE email = ?', email.toLowerCase());
 
   // Constant-ish work on both branches so a missing account is not detectable
   // by response time alone.
@@ -145,14 +140,15 @@ export function login(email: string, password: string): AuthResult {
   if (!user || !valid) throw HttpError.unauthorized('Email or password is incorrect.');
   if (user.status !== 'ACTIVE') throw HttpError.forbidden('This account is suspended.');
 
-  return { ...issueTokens(user), user: publicUser(user) };
+  return { ...(await issueTokens(user)), user: publicUser(user) };
 }
 
-export function refresh(refreshToken: string): AuthResult {
+export async function refresh(refreshToken: string): Promise<AuthResult> {
   const tokenHash = sha256(refreshToken);
-  const row = db.prepare('SELECT * FROM refresh_tokens WHERE token_hash = ?').get(tokenHash) as
-    | { id: string; user_id: string; expires_at: string; revoked_at: string | null }
-    | undefined;
+  const row = await one<{ id: string; user_id: string; expires_at: string; revoked_at: string | null }>(
+    'SELECT * FROM refresh_tokens WHERE token_hash = ?',
+    tokenHash,
+  );
 
   if (!row || row.revoked_at) throw HttpError.unauthorized('Your session has ended. Sign in again.');
 
@@ -161,19 +157,20 @@ export function refresh(refreshToken: string): AuthResult {
     throw HttpError.unauthorized('Your session has expired. Sign in again.');
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(row.user_id) as UserRow | undefined;
+  const user = await one<UserRow>('SELECT * FROM users WHERE id = ?', row.user_id);
   if (!user || user.status !== 'ACTIVE') throw HttpError.unauthorized('Account is unavailable.');
 
-  return transaction(() => {
+  return transaction(async () => {
     // Rotate: the presented token is retired as the replacement is issued.
-    db.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE id = ?').run(nowIso(), row.id);
-    return { ...issueTokens(user), user: publicUser(user) };
+    await run('UPDATE refresh_tokens SET revoked_at = ? WHERE id = ?', nowIso(), row.id);
+    return { ...(await issueTokens(user)), user: publicUser(user) };
   });
 }
 
-export function logout(refreshToken: string | undefined): { ok: true } {
+export async function logout(refreshToken: string | undefined): Promise<{ ok: true }> {
   if (refreshToken) {
-    db.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL').run(
+    await run(
+      'UPDATE refresh_tokens SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL',
       nowIso(),
       sha256(refreshToken),
     );
@@ -181,23 +178,24 @@ export function logout(refreshToken: string | undefined): { ok: true } {
   return { ok: true };
 }
 
-export function updateProfile(userId: string, input: { fullName?: string; timezone?: string }) {
+export async function updateProfile(userId: string, input: { fullName?: string; timezone?: string }) {
   if (input.timezone && !isValidTimeZone(input.timezone)) {
     throw HttpError.badRequest('That is not a recognised time zone.');
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as UserRow;
-  db.prepare('UPDATE users SET full_name = ?, timezone = ? WHERE id = ?').run(
+  const user = (await one<UserRow>('SELECT * FROM users WHERE id = ?', userId))!;
+  await run(
+    'UPDATE users SET full_name = ?, timezone = ? WHERE id = ?',
     input.fullName?.trim() || user.full_name,
     input.timezone ?? user.timezone,
     userId,
   );
 
-  return publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as UserRow);
+  return publicUser((await one<UserRow>('SELECT * FROM users WHERE id = ?', userId))!);
 }
 
-export function changePassword(userId: string, currentPassword: string, nextPassword: string) {
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as UserRow;
+export async function changePassword(userId: string, currentPassword: string, nextPassword: string) {
+  const user = (await one<UserRow>('SELECT * FROM users WHERE id = ?', userId))!;
   if (!verifyPassword(currentPassword, user.password_hash)) {
     throw HttpError.badRequest('Your current password is incorrect.');
   }
@@ -205,9 +203,10 @@ export function changePassword(userId: string, currentPassword: string, nextPass
   const issues = passwordIssues(nextPassword);
   if (issues.length > 0) throw HttpError.badRequest(`Your new password needs ${issues.join(', ')}.`);
 
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(nextPassword), userId);
+  await run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(nextPassword), userId);
   // Every existing session is invalidated on a password change.
-  db.prepare('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').run(
+  await run(
+    'UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL',
     nowIso(),
     userId,
   );
@@ -215,8 +214,8 @@ export function changePassword(userId: string, currentPassword: string, nextPass
   return { ok: true as const };
 }
 
-export function currentUser(userId: string) {
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as UserRow | undefined;
+export async function currentUser(userId: string) {
+  const user = await one<UserRow>('SELECT * FROM users WHERE id = ?', userId);
   if (!user) throw HttpError.notFound('Account not found.');
   return publicUser(user);
 }

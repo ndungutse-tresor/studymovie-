@@ -18,22 +18,22 @@ rewardsRouter.use(requireAuth);
 
 rewardsRouter.get(
   '/',
-  asyncHandler((req, res) => {
-    res.json({ sessions: listRewardSessions(req.user!.id) });
+  asyncHandler(async (req, res) => {
+    res.json({ sessions: await listRewardSessions(req.user!.id) });
   }),
 );
 
 rewardsRouter.get(
   '/active',
-  asyncHandler((req, res) => {
-    res.json({ session: activeReward(req.user!.id) });
+  asyncHandler(async (req, res) => {
+    res.json({ session: await activeReward(req.user!.id) });
   }),
 );
 
 rewardsRouter.get(
   '/:sessionId',
-  asyncHandler((req, res) => {
-    res.json({ session: getRewardSession(req.user!.id, req.params.sessionId) });
+  asyncHandler(async (req, res) => {
+    res.json({ session: await getRewardSession(req.user!.id, req.params.sessionId) });
   }),
 );
 
@@ -49,7 +49,7 @@ rewardsRouter.post(
     const movie = await findMovie(movieId);
     if (!movie) throw HttpError.notFound('That title is no longer available.');
 
-    const session = startRewardSession(req.user!.id, req.params.sessionId, {
+    const session = await startRewardSession(req.user!.id, req.params.sessionId, {
       id: movie.id,
       title: movie.title,
       source: movie.source,
@@ -57,7 +57,7 @@ rewardsRouter.post(
       posterUrl: movie.posterUrl,
     });
 
-    recordDecision(req.user!.id, movie, 'WATCHED');
+    await recordDecision(req.user!.id, movie, 'WATCHED');
 
     res.json({ session, movie });
   }),
@@ -65,7 +65,7 @@ rewardsRouter.post(
 
 rewardsRouter.post(
   '/:sessionId/end',
-  asyncHandler((req, res) => {
-    res.json({ session: endRewardSession(req.user!.id, req.params.sessionId) });
+  asyncHandler(async (req, res) => {
+    res.json({ session: await endRewardSession(req.user!.id, req.params.sessionId) });
   }),
 );

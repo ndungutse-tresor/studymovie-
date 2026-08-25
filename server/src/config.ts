@@ -27,6 +27,17 @@ function requiredSecret(name: string, fallbackFile: string): string {
   return generated;
 }
 
+function requiredDatabaseUrl(): string {
+  const url = process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '';
+  if (!url) {
+    throw new Error(
+      'DATABASE_URL is not set. Point it at your Postgres instance, for example ' +
+        'postgresql://user:password@host:6543/postgres',
+    );
+  }
+  return url;
+}
+
 function int(name: string, fallback: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -39,9 +50,15 @@ export const config = {
   isProduction: process.env.NODE_ENV === 'production',
   port: int('PORT', 4000),
   dataDir,
-  databaseFile: process.env.DATABASE_FILE
-    ? path.resolve(process.env.DATABASE_FILE)
-    : path.join(dataDir, 'studyreel.sqlite'),
+
+  /**
+   * Postgres connection string. In serverless deployments this must point at a
+   * pooled endpoint (Supabase's transaction pooler on port 6543), because each
+   * invocation opens its own connections and the direct port exhausts quickly.
+   */
+  databaseUrl: requiredDatabaseUrl(),
+  databasePoolMax: int('DATABASE_POOL_MAX', process.env.VERCEL ? 1 : 10),
+  databaseSsl: (process.env.DATABASE_SSL ?? 'true') !== 'false',
 
   auth: {
     accessSecret: requiredSecret('JWT_ACCESS_SECRET', '.access-secret'),

@@ -15,7 +15,10 @@
     "start": "npm --workspace server run start",
     "seed": "npm --workspace server run seed",
     "typecheck": "npm --workspace server run typecheck && npm --workspace client run typecheck",
-    "lint": "npm run typecheck"
+    "lint": "npm run typecheck",
+    "vercel-build": "npm --workspace server run build && npm --workspace server run migrate && npm --workspace server run seed && npm --workspace client run build",
+    "migrate": "npm --workspace server run migrate",
+    "db:setup": "npm run migrate && npm run seed"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
