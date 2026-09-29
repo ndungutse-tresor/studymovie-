@@ -23,13 +23,45 @@ export function renderInline(text: string, keyPrefix: string): ReactNode[] {
       if (!piece) return;
       if (piece.startsWith('**') && piece.endsWith('**') && piece.length > 4) {
         nodes.push(<strong key={`${keyPrefix}-b${segmentIndex}-${pieceIndex}`}>{piece.slice(2, -2)}</strong>);
-      } else {
-        nodes.push(<Fragment key={`${keyPrefix}-t${segmentIndex}-${pieceIndex}`}>{piece}</Fragment>);
+        return;
       }
+
+      // Single-asterisk emphasis, only when it hugs a word, so "5 * 3" stays literal.
+      piece.split(/(\*[^*\s](?:[^*]*[^*\s])?\*)/g).forEach((part, partIndex) => {
+        if (!part) return;
+        const key = `${keyPrefix}-t${segmentIndex}-${pieceIndex}-${partIndex}`;
+        if (part.length > 2 && part.startsWith('*') && part.endsWith('*')) {
+          nodes.push(<em key={key}>{part.slice(1, -1)}</em>);
+        } else {
+          nodes.push(<Fragment key={key}>{part}</Fragment>);
+        }
+      });
     });
   });
 
   return nodes;
+}
+
+/** A stable anchor for a heading, from its text with inline markup removed. */
+export function headingId(text: string): string {
+  return text
+    .replace(/[`*]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/** The lesson's section headings, in order, for an outline. */
+export function extractHeadings(source: string): { id: string; text: string }[] {
+  const headings: { id: string; text: string }[] = [];
+  let inFence = false;
+  for (const line of source.replace(/\r\n/g, '\n').split('\n')) {
+    if (line.trimStart().startsWith('```')) inFence = !inFence;
+    if (inFence) continue;
+    const match = /^(#{2,4})\s+(.*)$/.exec(line);
+    if (match) headings.push({ id: headingId(match[2]), text: match[2].replace(/[`*]/g, '') });
+  }
+  return headings;
 }
 
 function isTableDivider(line: string): boolean {
@@ -79,7 +111,11 @@ export function renderMarkdown(source: string): ReactNode[] {
     // Heading
     const heading = /^(#{2,4})\s+(.*)$/.exec(line);
     if (heading) {
-      blocks.push(<h2 key={`h-${key++}`}>{renderInline(heading[2], `h${key}`)}</h2>);
+      blocks.push(
+        <h2 key={`h-${key++}`} id={headingId(heading[2])}>
+          {renderInline(heading[2], `h${key}`)}
+        </h2>,
+      );
       index += 1;
       continue;
     }

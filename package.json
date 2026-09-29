@@ -16,9 +16,10 @@
     "seed": "npm --workspace server run seed",
     "typecheck": "npm --workspace server run typecheck && npm --workspace client run typecheck",
     "lint": "npm run typecheck",
-    "vercel-build": "npm --workspace server run build && npm --workspace server run migrate && npm --workspace server run seed && npm --workspace client run build",
+    "vercel-build": "npm --workspace server run build && npm --workspace server run migrate && npm --workspace server run seed && npm --workspace server run sync-movies && npm --workspace client run build",
     "migrate": "npm --workspace server run migrate",
-    "db:setup": "npm run migrate && npm run seed"
+    "sync-movies": "npm --workspace server run sync-movies",
+    "db:setup": "npm run migrate && npm run seed && npm run sync-movies"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

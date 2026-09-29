@@ -1,17 +1,17 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/async-handler.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAdmin, requireAuth } from '../middleware/auth.js';
 import { HttpError } from '../lib/http-error.js';
 import {
-  aggregateMovies,
-  availableGenres,
+  browseMovies,
   clearDecision,
   decisionMap,
   findMovie,
   listDecisions,
   personalise,
   recordDecision,
+  syncOnce,
 } from '../services/movies/index.js';
 
 export const moviesRouter = Router();
@@ -24,22 +24,23 @@ const querySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
 
-/** The browse and "top movies" rail. Declined titles are filtered out. */
+/** The browse page: ranked list, top rail, newest arrivals. Declined titles are filtered out. */
 moviesRouter.get(
   '/',
   asyncHandler(async (req, res) => {
     const filters = querySchema.parse(req.query);
-    const { movies, sources, fromCache } = await aggregateMovies(filters);
+    const { movies, recent, genres, sources, lastSyncedAt } = await browseMovies(filters);
     const decisions = await decisionMap(req.user!.id);
     const personalised = personalise(movies, decisions);
 
     res.json({
       movies: personalised,
-      // Already ordered by popularity in the aggregator.
+      // Already ordered by playability and popularity in the library.
       top: personalised.slice(0, 10),
-      genres: availableGenres(movies),
+      recent: personalise(recent, decisions),
+      genres,
       sources,
-      fromCache,
+      lastSyncedAt,
     });
   }),
 );
@@ -51,6 +52,25 @@ moviesRouter.get(
       .object({ decision: z.enum(['WATCH_LATER', 'DECLINED', 'WATCHED']).optional() })
       .parse(req.query);
     res.json({ items: await listDecisions(req.user!.id, decision) });
+  }),
+);
+
+/** Pulls every source now, rather than waiting for the scheduled run. */
+moviesRouter.post(
+  '/sync',
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    res.json({ sync: await syncOnce() });
+  }),
+);
+
+/** One title, for the player. */
+moviesRouter.get(
+  '/:movieId',
+  asyncHandler(async (req, res) => {
+    const movie = await findMovie(req.params.movieId);
+    if (!movie) throw HttpError.notFound('That title is no longer available.');
+    res.json({ movie });
   }),
 );
 

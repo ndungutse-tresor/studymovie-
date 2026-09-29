@@ -4,13 +4,16 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Near-neutral charcoal, so the brand blue and the reward gold carry the colour.
         ink: {
-          950: '#070a12',
-          900: '#0b101c',
-          800: '#111827',
-          700: '#1b2436',
-          600: '#26314a',
-          500: '#3a4763',
+          950: '#08090c',
+          900: '#0d0f14',
+          850: '#111319',
+          800: '#161920',
+          700: '#1f232c',
+          600: '#2a2f3a',
+          500: '#3d4351',
+          400: '#5b6272',
         },
         brand: {
           50: '#eef4ff',
@@ -24,14 +27,33 @@ export default {
           800: '#1c3388',
           900: '#1c2f6c',
         },
+        // Earned viewing time: the one warm colour in the product.
+        reel: {
+          50: '#fff8e8',
+          100: '#feedc4',
+          200: '#fcdb8a',
+          300: '#f8c453',
+          400: '#f2ad2b',
+          500: '#e0921a',
+          600: '#b87112',
+          700: '#8f5512',
+          800: '#6b4114',
+          900: '#4a2e10',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
-        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+        display: ['"Instrument Serif"', 'ui-serif', 'Georgia', 'serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+      },
+      fontSize: {
+        '2xs': ['0.6875rem', { lineHeight: '1rem' }],
       },
       boxShadow: {
-        panel: '0 1px 2px rgba(7, 10, 18, 0.06), 0 12px 32px -12px rgba(7, 10, 18, 0.18)',
-        lift: '0 24px 48px -24px rgba(7, 10, 18, 0.45)',
+        panel: '0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.3)',
+        lift: '0 24px 48px -24px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04)',
+        glow: '0 10px 30px -12px rgba(53, 102, 240, 0.7)',
+        'glow-reel': '0 10px 30px -12px rgba(242, 173, 43, 0.6)',
       },
       keyframes: {
         'fade-up': {

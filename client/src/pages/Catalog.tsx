@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import type { CourseSummary, Level } from '../lib/types';
 import { LEVEL_LABEL } from '../lib/format';
-import { Callout, EmptyState, PageHeader, Skeleton, TextInput } from '../components/ui';
+import { Callout, EmptyState, PageHeader, SegmentedControl, Skeleton, TextInput } from '../components/ui';
 import { CourseCard } from '../components/CourseCard';
 import { Icon } from '../components/Icon';
 
@@ -61,7 +61,7 @@ export default function Catalog() {
         description="Eight IT courses across beginner, intermediate, and advanced levels. Each chapter ends in an exam, and each pass earns viewing time."
       />
 
-      <div className="panel mb-7 flex flex-col gap-4 p-4 lg:flex-row lg:items-center">
+      <div className="mb-8 flex flex-col gap-3 lg:flex-row lg:items-center">
         <div className="relative flex-1">
           <Icon
             name="search"
@@ -77,28 +77,13 @@ export default function Catalog() {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {FILTERS.map((filter) => (
-            <button
-              key={filter.value}
-              type="button"
-              onClick={() => setLevel(filter.value)}
-              className={`h-9 rounded-lg border px-3.5 text-sm font-medium transition ${
-                level === filter.value
-                  ? 'border-brand-500/50 bg-brand-500/15 text-brand-100'
-                  : 'border-ink-600 text-slate-400 hover:border-ink-500 hover:text-slate-200'
-              }`}
-            >
-              {filter.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl label="Filter by level" options={FILTERS} value={level} onChange={setLevel} />
 
         <select
           value={category}
           onChange={(event) => setCategory(event.target.value)}
           aria-label="Filter by category"
-          className="input h-9 w-full py-0 lg:w-52"
+          className="input w-full appearance-none pr-9 lg:w-56"
         >
           {categories.map((entry) => (
             <option key={entry} value={entry}>
@@ -111,7 +96,7 @@ export default function Catalog() {
       {!courses ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton key={index} className="h-56" />
+            <Skeleton key={index} className="h-72" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
@@ -123,11 +108,11 @@ export default function Catalog() {
       ) : (
         <>
           {enrolled.length > 0 ? (
-            <section className="mb-9">
-              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
-                In progress
+            <section className="mb-12">
+              <h2 className="section-title mb-4">
+                In progress <span className="ml-1 font-normal text-slate-500">{enrolled.length}</span>
               </h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {enrolled.map((course) => (
                   <CourseCard key={course.id} course={course} to={`/app/courses/${course.slug}`} />
                 ))}
@@ -137,10 +122,11 @@ export default function Catalog() {
 
           {available.length > 0 ? (
             <section>
-              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
-                {enrolled.length > 0 ? 'Also available' : 'Available courses'}
+              <h2 className="section-title mb-4">
+                {enrolled.length > 0 ? 'Also available' : 'Available courses'}{' '}
+                <span className="ml-1 font-normal text-slate-500">{available.length}</span>
               </h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {available.map((course) => (
                   <CourseCard key={course.id} course={course} to={`/app/courses/${course.slug}`} />
                 ))}

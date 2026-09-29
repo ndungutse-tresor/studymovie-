@@ -17,10 +17,10 @@ export function ScheduleAlerts() {
         <div
           key={`${occurrence.scheduleId}:${occurrence.startsAt}`}
           role="alert"
-          className="pointer-events-auto w-full max-w-sm animate-fade-up rounded-2xl border border-brand-500/40 bg-ink-900/95 p-4 shadow-lift backdrop-blur"
+          className="pointer-events-auto w-full max-w-sm animate-fade-up rounded-xl border border-white/10 bg-ink-850/95 p-4 shadow-lift backdrop-blur-xl"
         >
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-300">
+            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-brand-300 ring-1 ring-inset ring-brand-400/30">
               <Icon name="bell" size={18} />
             </span>
             <div className="min-w-0 flex-1">
@@ -55,7 +55,7 @@ export function ScheduleAlerts() {
               type="button"
               onClick={() => void dismiss(occurrence)}
               aria-label="Dismiss reminder"
-              className="rounded-md p-1 text-slate-500 transition hover:bg-ink-800 hover:text-slate-300"
+              className="rounded-md p-1 text-slate-500 transition hover:bg-white/[0.06] hover:text-slate-300"
             >
               <Icon name="close" size={15} />
             </button>

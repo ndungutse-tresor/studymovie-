@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError, api } from '../lib/api';
 import type { Movie, RewardSession } from '../lib/types';
-import { clockFromSeconds, posterGradient } from '../lib/format';
-import { Badge, Button, Callout, Skeleton } from '../components/ui';
+import { clockFromSeconds } from '../lib/format';
+import { Button, Callout, ProgressRing, Skeleton } from '../components/ui';
 import { Icon } from '../components/Icon';
+import { Poster } from '../components/Poster';
 
 /**
  * The timed player.
@@ -109,18 +110,21 @@ export default function Watch() {
   }
 
   const urgent = secondsLeft <= 120;
-  const elapsedPercent = session.minutesGranted
-    ? 100 - (secondsLeft / (session.minutesGranted * 60)) * 100
-    : 0;
+  const total = session.minutesGranted * 60;
+  const remainingPercent = total ? (secondsLeft / total) * 100 : 0;
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-5">
         <div className="min-w-0">
-          <Badge tone="border-violet-500/40 bg-violet-500/15 text-violet-200" icon="play">
+          <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.12em] text-reel-300">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-reel-400 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-reel-400" />
+            </span>
             Earned viewing session
-          </Badge>
-          <h1 className="mt-3 truncate text-2xl font-bold tracking-tight text-white">
+          </p>
+          <h1 className="mt-2 truncate text-2xl font-semibold tracking-tight text-white sm:text-3xl">
             {session.movie?.title ?? 'Your session'}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -129,30 +133,39 @@ export default function Watch() {
         </div>
 
         <div
-          className={`rounded-xl border px-5 py-3 text-center ${
-            urgent ? 'border-rose-500/45 bg-rose-500/10' : 'border-ink-600 bg-ink-900/70'
+          className={`flex items-center gap-4 rounded-xl border px-4 py-3 ${
+            urgent ? 'border-rose-400/40 bg-rose-500/10' : 'border-white/10 bg-ink-900'
           }`}
         >
-          <p className="text-[0.65rem] uppercase tracking-wider text-slate-500">Session closes in</p>
-          <p
-            className={`mt-0.5 font-mono text-2xl font-bold tabular-nums ${
-              urgent ? 'animate-progress-pulse text-rose-300' : 'text-white'
-            }`}
+          <ProgressRing
+            value={remainingPercent}
+            size={44}
+            stroke={4}
+            tone={urgent ? 'text-rose-400' : 'text-reel-400'}
           >
-            {clockFromSeconds(secondsLeft)}
-          </p>
+            <Icon name="clock" size={15} className={urgent ? 'text-rose-300' : 'text-slate-400'} />
+          </ProgressRing>
+          <div>
+            <p className="text-2xs uppercase tracking-wider text-slate-500">Session closes in</p>
+            <p
+              className={`font-mono text-2xl font-semibold tabular-nums ${
+                urgent ? 'animate-progress-pulse text-rose-200' : 'text-white'
+              }`}
+            >
+              {clockFromSeconds(secondsLeft)}
+            </p>
+          </div>
         </div>
       </div>
 
-      <div className="h-1 w-full overflow-hidden rounded-full bg-ink-800">
-        <div
-          className={`h-full rounded-full transition-[width] duration-1000 ${urgent ? 'bg-rose-500' : 'bg-violet-500'}`}
-          style={{ width: `${Math.min(100, Math.max(0, elapsedPercent))}%` }}
-        />
-      </div>
-
-      <div className="panel mt-5 overflow-hidden">
+      <div className="overflow-hidden rounded-xl bg-black shadow-[0_40px_80px_-30px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
         <Player movie={movie} session={session} />
+        <div className="h-1 w-full bg-white/[0.06]">
+          <div
+            className={`h-full transition-[width] duration-1000 ${urgent ? 'bg-rose-500' : 'bg-reel-400'}`}
+            style={{ width: `${Math.min(100, Math.max(0, 100 - remainingPercent))}%` }}
+          />
+        </div>
       </div>
 
       {error ? (
@@ -161,14 +174,13 @@ export default function Watch() {
         </div>
       ) : null}
 
-      <div className="panel mt-5 flex flex-wrap items-center justify-between gap-4 p-5">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-slate-200">
-            The player closes itself when the timer reaches zero
-          </p>
-          <p className="mt-1 text-sm text-slate-500">
-            The next chapter unlocks the moment this session ends — whether it runs out or you end it early.
-            Time you do not use is not carried over.
+      <div className="mt-6 grid gap-5 md:grid-cols-[1fr_auto] md:items-center">
+        <div className="flex gap-3.5">
+          <Icon name="info" size={18} className="mt-0.5 shrink-0 text-slate-500" />
+          <p className="text-sm leading-6 text-slate-400">
+            <span className="font-medium text-slate-200">The player closes itself when the timer reaches zero.</span>{' '}
+            The next chapter unlocks the moment this session ends — whether it runs out or you end it early. Time you
+            do not use is not carried over.
           </p>
         </div>
         <Button variant="secondary" icon="stop" loading={ending} onClick={() => void endSession()}>
@@ -204,31 +216,42 @@ function Player({ movie, session }: { movie: Movie | null; session: RewardSessio
   }
 
   return (
-    <div
-      className="flex aspect-video w-full flex-col items-center justify-center gap-4 p-8 text-center"
-      style={{ backgroundImage: posterGradient(title) }}
-    >
-      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-black/35 text-white/80">
-        <Icon name="film" size={26} />
-      </span>
-      <div>
-        <p className="text-lg font-semibold text-white">{title}</p>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-white/70">
-          No playable stream could be resolved for this title from here. Your session clock is still
-          running, and the next chapter unlocks when it ends.
-        </p>
+    <div className="relative isolate flex aspect-video w-full items-center justify-center overflow-hidden">
+      <Poster
+        title={title}
+        posterUrl={movie?.posterUrl ?? session.movie?.posterUrl}
+        size="lg"
+        className="absolute inset-0 -z-10 scale-110 opacity-50 blur-2xl"
+      />
+      <div className="absolute inset-0 -z-10 bg-black/50" />
+      <div className="flex max-w-2xl flex-col items-center gap-6 p-6 text-center sm:flex-row sm:text-left">
+        <Poster
+          title={title}
+          year={movie?.year}
+          genre={movie?.genres[0]}
+          posterUrl={movie?.posterUrl ?? session.movie?.posterUrl}
+          size="sm"
+          className="hidden aspect-[2/3] w-36 shrink-0 rounded-lg shadow-lift ring-1 ring-white/15 sm:block"
+        />
+        <div>
+          <p className="text-lg font-semibold text-white">{title}</p>
+          <p className="mt-2 text-sm leading-6 text-white/70">
+            No playable stream could be resolved for this title from here. Your session clock is still running, and
+            the next chapter unlocks when it ends.
+          </p>
+          {movie?.sourceUrl ? (
+            <a
+              href={movie.sourceUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="mt-5 inline-flex h-9 items-center gap-2 rounded-lg bg-white px-4 text-sm font-semibold text-ink-950 transition hover:bg-slate-200"
+            >
+              Open at the source
+              <Icon name="external" size={14} />
+            </a>
+          ) : null}
+        </div>
       </div>
-      {movie?.sourceUrl ? (
-        <a
-          href={movie.sourceUrl}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="inline-flex h-9 items-center gap-2 rounded-lg bg-white/12 px-4 text-sm font-medium text-white transition hover:bg-white/20"
-        >
-          Open at the source
-          <Icon name="external" size={14} />
-        </a>
-      ) : null}
     </div>
   );
 }
@@ -237,14 +260,15 @@ function SessionEnded({ session, onNext }: { session: RewardSession; onNext: () 
   const expired = session.status === 'EXPIRED';
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <div className="panel p-8 text-center">
-        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-500/15 text-brand-300">
-          <Icon name={expired ? 'clock' : 'check-circle'} size={28} />
+    <div className="mx-auto max-w-xl py-8">
+      <div className="panel relative isolate overflow-hidden p-8 text-center sm:p-10">
+        <div className="pointer-events-none absolute left-1/2 top-0 -z-10 h-48 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-500/20 blur-3xl" />
+        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand-500/15 text-brand-200 ring-1 ring-inset ring-brand-400/30">
+          <Icon name={session.courseCompleted ? 'award' : expired ? 'clock' : 'check'} size={24} />
         </span>
 
-        <h1 className="mt-5 text-2xl font-bold tracking-tight text-white">
-          {expired ? 'Your viewing time is up' : 'Session closed'}
+        <h1 className="mt-6 text-2xl font-semibold tracking-tight text-white">
+          {session.courseCompleted ? 'Course complete' : expired ? 'Your viewing time is up' : 'Session closed'}
         </h1>
         <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-slate-400">
           {session.courseCompleted
@@ -254,18 +278,18 @@ function SessionEnded({ session, onNext }: { session: RewardSession; onNext: () 
               : 'This chapter is complete.'}
         </p>
 
-        <div className="mt-7 flex flex-wrap justify-center gap-3">
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
           {session.nextChapterId ? (
             <Button size="lg" onClick={onNext} iconAfter="arrow-right">
               Start the next chapter
             </Button>
           ) : null}
-          <a
-            href="/app"
-            className="inline-flex h-12 items-center rounded-lg border border-ink-600 px-5 text-sm font-medium text-slate-200 transition hover:border-ink-500"
+          <Link
+            to="/app"
+            className="inline-flex h-11 items-center rounded-lg border border-white/10 bg-white/[0.04] px-5 text-sm font-medium text-slate-100 transition hover:border-white/20 hover:bg-white/[0.08]"
           >
             Back to dashboard
-          </a>
+          </Link>
         </div>
       </div>
     </div>

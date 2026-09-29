@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from '../lib/api';
 import type { Movie, MovieDecision, RewardSession } from '../lib/types';
-import { Badge, Callout, EmptyState, LinkButton, PageHeader, Skeleton } from '../components/ui';
+import { Callout, EmptyState, LinkButton, PageHeader, SegmentedControl, Skeleton } from '../components/ui';
+import { Icon } from '../components/Icon';
 import { MovieCard } from '../components/MovieCard';
 import { useNavigate } from 'react-router-dom';
 
@@ -93,31 +94,24 @@ export default function Watchlist() {
       />
 
       {canStart ? (
-        <div className="panel mb-6 border-emerald-500/35 bg-emerald-500/[0.06] p-4">
-          <Badge tone="border-emerald-500/30 bg-emerald-500/10 text-emerald-300" icon="check-circle">
-            {reward!.minutesGranted} minutes of viewing time available
-          </Badge>
-          <p className="mt-2 text-sm text-slate-400">
-            Pick anything from your saved list to start the session.
-          </p>
+        <div className="mb-8 flex items-center gap-4 rounded-xl border border-reel-400/30 bg-gradient-to-r from-reel-400/[0.1] to-transparent p-5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-reel-400/15 text-reel-200">
+            <Icon name="ticket" size={19} />
+          </span>
+          <div>
+            <p className="font-semibold text-white">{reward!.minutesGranted} minutes of viewing time available</p>
+            <p className="mt-0.5 text-sm text-slate-400">Pick anything from your saved list to start the session.</p>
+          </div>
         </div>
       ) : null}
 
-      <div className="mb-6 flex flex-wrap gap-2">
-        {TABS.map((entry) => (
-          <button
-            key={entry.value}
-            type="button"
-            onClick={() => setTab(entry.value)}
-            className={`h-9 rounded-lg border px-4 text-sm font-medium transition ${
-              tab === entry.value
-                ? 'border-brand-500/50 bg-brand-500/15 text-brand-100'
-                : 'border-ink-600 text-slate-400 hover:border-ink-500 hover:text-slate-200'
-            }`}
-          >
-            {entry.label}
-          </button>
-        ))}
+      <div className="mb-8">
+        <SegmentedControl
+          label="Lists"
+          options={TABS.map((entry) => ({ value: entry.value, label: entry.label }))}
+          value={tab}
+          onChange={setTab}
+        />
       </div>
 
       {error ? (
@@ -127,9 +121,9 @@ export default function Watchlist() {
       ) : null}
 
       {!items ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {Array.from({ length: 5 }).map((_, index) => (
-            <Skeleton key={index} className="h-80" />
+            <Skeleton key={index} className="aspect-[2/3]" />
           ))}
         </div>
       ) : items.length === 0 ? (
@@ -140,7 +134,7 @@ export default function Watchlist() {
           action={<LinkButton to="/app/movies">Browse films</LinkButton>}
         />
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {items.map((item) =>
             item.movie ? (
               <MovieCard
@@ -159,7 +153,7 @@ export default function Watchlist() {
                 <button
                   type="button"
                   onClick={() => void remove(item.movieId)}
-                  className="mt-4 h-8 rounded-lg border border-ink-600 text-xs font-medium text-slate-300 transition hover:border-ink-500"
+                  className="mt-4 h-8 rounded-lg border border-white/10 text-xs font-medium text-slate-300 transition hover:border-white/20"
                 >
                   Remove
                 </button>

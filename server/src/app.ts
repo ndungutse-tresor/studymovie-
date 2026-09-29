@@ -15,6 +15,7 @@ import { rewardsRouter } from './routes/rewards.js';
 import { moviesRouter } from './routes/movies.js';
 import { scheduleRouter } from './routes/schedule.js';
 import { dashboardRouter } from './routes/dashboard.js';
+import { cronRouter } from './routes/cron.js';
 import { verifyAccessToken } from './lib/tokens.js';
 
 export function createApp() {
@@ -124,6 +125,7 @@ export function createApp() {
   app.use('/api/movies', moviesRouter);
   app.use('/api/schedule', scheduleRouter);
   app.use('/api/dashboard', dashboardRouter);
+  app.use('/api/cron', cronRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

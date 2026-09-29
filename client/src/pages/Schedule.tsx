@@ -121,9 +121,9 @@ export default function Schedule() {
       />
 
       {!notificationsEnabled ? (
-        <div className="panel mb-6 flex flex-wrap items-center justify-between gap-4 p-5">
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ink-800 text-slate-400">
+        <div className="panel mb-8 flex flex-wrap items-center justify-between gap-4 p-5">
+          <div className="flex items-start gap-3.5">
+            <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] text-slate-400 ring-1 ring-inset ring-white/10">
               <Icon name="bell" size={17} />
             </span>
             <div>
@@ -145,9 +145,11 @@ export default function Schedule() {
         </div>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+      {schedules && schedules.length > 0 ? <WeekStrip schedules={schedules} timeZone={user?.timezone} /> : null}
+
+      <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
         <section>
-          <h2 className="mb-4 text-lg font-semibold text-white">Weekly sessions</h2>
+          <h2 className="section-title mb-4">Weekly sessions</h2>
 
           {!schedules ? (
             <div className="space-y-3">
@@ -164,7 +166,7 @@ export default function Schedule() {
           ) : (
             <ul className="space-y-3">
               {schedules.map((entry) => (
-                <li key={entry.id} className={`panel p-5 ${entry.active ? '' : 'opacity-60'}`}>
+                <li key={entry.id} className={`panel p-5 ${entry.active ? '' : 'opacity-55'}`}>
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -189,7 +191,7 @@ export default function Schedule() {
                         <p className="mt-1.5 text-xs text-slate-500">{entry.courseTitle}</p>
                       ) : null}
                       {entry.nextOccurrence ? (
-                        <p className="mt-2 text-xs text-brand-300">
+                        <p className="mt-2.5 inline-flex items-center gap-1.5 rounded-md bg-brand-500/10 px-2 py-0.5 text-xs font-medium text-brand-200">
                           Next: {dateTimeLabel(entry.nextOccurrence, user?.timezone)}
                         </p>
                       ) : null}
@@ -217,19 +219,19 @@ export default function Schedule() {
           )}
 
           {upcoming.length > 0 ? (
-            <section className="panel mt-6 p-5">
-              <h2 className="mb-4 text-sm font-semibold text-white">Next seven days</h2>
-              <ul className="divide-y divide-ink-800">
+            <section className="mt-8">
+              <h2 className="section-title mb-4">Next seven days</h2>
+              <ul className="panel divide-y divide-white/[0.06] px-5 py-1">
                 {upcoming.slice(0, 8).map((occurrence) => (
                   <li
                     key={`${occurrence.scheduleId}:${occurrence.startsAt}`}
-                    className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
+                    className="flex items-center gap-3 py-3.5"
                   >
                     <span
                       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
                         occurrence.inProgress
-                          ? 'bg-emerald-500/12 text-emerald-300'
-                          : 'bg-ink-800 text-slate-400'
+                          ? 'bg-emerald-500/10 text-emerald-300'
+                          : 'bg-white/[0.05] text-slate-400'
                       }`}
                     >
                       <Icon name={occurrence.inProgress ? 'play' : 'clock'} size={14} />
@@ -255,8 +257,8 @@ export default function Schedule() {
         </section>
 
         <aside>
-          <form onSubmit={handleSubmit} className="panel sticky top-6 space-y-5 p-5">
-            <h2 className="text-sm font-semibold text-white">
+          <form onSubmit={handleSubmit} className="panel space-y-5 p-6 lg:sticky lg:top-8">
+            <h2 className="section-title">
               {editingId ? 'Edit session' : 'Add a study session'}
             </h2>
 
@@ -340,7 +342,7 @@ export default function Schedule() {
               </Field>
             </div>
 
-            <div className="flex gap-2 border-t border-ink-800 pt-4">
+            <div className="flex gap-2 border-t border-white/[0.06] pt-5">
               <Button type="submit" loading={saving} block>
                 {editingId ? 'Save changes' : 'Add session'}
               </Button>
@@ -354,6 +356,69 @@ export default function Schedule() {
         </aside>
       </div>
     </>
+  );
+}
+
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+/** Day of the week (0 = Sunday) in the learner's zone, which may differ from the browser's. */
+function todayIn(timeZone?: string): number {
+  try {
+    const name = new Intl.DateTimeFormat('en-US', { weekday: 'long', ...(timeZone ? { timeZone } : {}) }).format(
+      new Date(),
+    );
+    const index = DAYS.indexOf(name);
+    return index === -1 ? new Date().getDay() : index;
+  } catch {
+    return new Date().getDay();
+  }
+}
+
+/** The recurring week as seven columns, so gaps and clusters are visible at a glance. */
+function WeekStrip({ schedules, timeZone }: { schedules: ScheduleEntry[]; timeZone?: string }) {
+  const today = todayIn(timeZone);
+
+  return (
+    <section className="panel mb-8 overflow-hidden">
+      <div className="no-scrollbar overflow-x-auto">
+        <div className="grid min-w-[42rem] grid-cols-7 divide-x divide-white/[0.06]">
+          {WEEK_ORDER.map((day) => {
+            const entries = schedules
+              .filter((entry) => entry.dayOfWeek === day)
+              .sort((a, b) => a.startTime.localeCompare(b.startTime));
+            const isToday = day === today;
+            return (
+              <div key={day} className={`min-h-[8.5rem] p-3 ${isToday ? 'bg-brand-500/[0.04]' : ''}`}>
+                <p
+                  className={`text-xs font-semibold uppercase tracking-wider ${
+                    isToday ? 'text-brand-300' : 'text-slate-500'
+                  }`}
+                >
+                  {DAYS[day].slice(0, 3)}
+                  {isToday ? <span className="ml-1.5 font-medium normal-case tracking-normal">Today</span> : null}
+                </p>
+                <div className="mt-3 space-y-2">
+                  {entries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className={`rounded-md border-l-2 px-2 py-1.5 ${
+                        entry.active
+                          ? 'border-brand-400 bg-brand-500/10'
+                          : 'border-slate-600 bg-white/[0.03] opacity-60'
+                      }`}
+                    >
+                      <p className="font-mono text-2xs font-medium text-slate-300">{entry.startTime}</p>
+                      <p className="truncate text-xs font-medium text-white">{entry.title}</p>
+                      <p className="text-2xs text-slate-500">{entry.durationMinutes} min</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
   );
 }
 

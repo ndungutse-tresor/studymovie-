@@ -214,6 +214,49 @@ CREATE TABLE IF NOT EXISTS movie_cache (
   fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ---------------------------------------------------------------------------
+-- The film library: every title imported from the free sources, refreshed by
+-- the scheduled sync. Browsing reads from here, so a page view never waits on
+-- an upstream provider.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS movie_library (
+  id              TEXT PRIMARY KEY,
+  source          TEXT NOT NULL,
+  title           TEXT NOT NULL,
+  year            INTEGER,
+  synopsis        TEXT NOT NULL DEFAULT '',
+  genres          TEXT[] NOT NULL DEFAULT '{}',
+  runtime_minutes INTEGER,
+  poster_url      TEXT,
+  source_url      TEXT,
+  stream_url      TEXT,
+  embed_url       TEXT,
+  popularity      INTEGER NOT NULL DEFAULT 0,
+  rating          REAL,
+  licence         TEXT NOT NULL DEFAULT '',
+  -- When the source published it, as opposed to when StudyReel first saw it.
+  added_at        TIMESTAMPTZ,
+  first_seen_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_movie_library_popularity ON movie_library(popularity DESC);
+CREATE INDEX IF NOT EXISTS idx_movie_library_added ON movie_library(added_at DESC NULLS LAST);
+
+-- The outcome of the most recent sync for each source.
+CREATE TABLE IF NOT EXISTS movie_sources (
+  name       TEXT PRIMARY KEY,
+  status     TEXT NOT NULL CHECK (status IN ('ok', 'unavailable', 'disabled')),
+  item_count INTEGER NOT NULL DEFAULT 0,
+  added      INTEGER NOT NULL DEFAULT 0,
+  detail     TEXT,
+  synced_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The API connects as the table owner and bypasses RLS; enabling it with no
+-- policies keeps these tables closed to Supabase's public Data API.
+ALTER TABLE movie_library ENABLE ROW LEVEL SECURITY;
+ALTER TABLE movie_sources ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id         TEXT PRIMARY KEY,
   user_id    TEXT REFERENCES users(id) ON DELETE SET NULL,

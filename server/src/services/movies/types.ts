@@ -1,4 +1,4 @@
-export type MovieSource = 'archive' | 'tmdb' | 'catalog';
+export type MovieSource = 'archive' | 'youtube' | 'tmdb' | 'catalog';
 
 export interface Movie {
   /** Stable, source-prefixed identifier, e.g. `archive:night_of_the_living_dead`. */
@@ -21,6 +21,8 @@ export interface Movie {
   rating: number | null;
   /** Short licence note shown in the UI. */
   licence: string;
+  /** When the source published the title (ISO 8601), if it says. */
+  addedAt?: string | null;
 }
 
 export interface MovieQuery {

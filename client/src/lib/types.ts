@@ -139,7 +139,7 @@ export type MovieDecision = 'WATCH_LATER' | 'DECLINED' | 'WATCHED';
 
 export interface Movie {
   id: string;
-  source: 'archive' | 'tmdb' | 'catalog';
+  source: 'archive' | 'youtube' | 'tmdb' | 'catalog';
   title: string;
   year: number | null;
   synopsis: string;
@@ -152,6 +152,8 @@ export interface Movie {
   popularity: number;
   rating: number | null;
   licence: string;
+  /** When the source published it (ISO 8601). */
+  addedAt?: string | null;
   decision?: MovieDecision | null;
 }
 
@@ -159,7 +161,17 @@ export interface MovieSourceStatus {
   name: string;
   status: 'ok' | 'unavailable' | 'disabled';
   count: number;
+  /** Titles the most recent sync added from this source. */
+  added?: number;
   detail?: string;
+  syncedAt?: string | null;
+}
+
+export interface MovieSyncSummary {
+  sources: { name: string; status: MovieSourceStatus['status']; fetched: number; added: number; detail?: string }[];
+  added: number;
+  total: number;
+  durationMs: number;
 }
 
 export interface RewardSession {

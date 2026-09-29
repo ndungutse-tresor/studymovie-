@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ApiError } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { Button, Callout, Field, TextInput } from '../components/ui';
+import { Button, Callout, Field, PasswordInput, TextInput } from '../components/ui';
+import { AuthAside, AuthFooterNote } from '../components/AuthAside';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -31,52 +32,66 @@ export default function Login() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-md px-4 py-16 sm:px-6">
-      <h1 className="text-3xl font-bold tracking-tight text-white">Sign in</h1>
-      <p className="mt-3 text-sm leading-7 text-slate-400">
-        Continue your course, or start the chapter your schedule has queued up.
-      </p>
+    <div className="mx-auto grid w-full max-w-6xl gap-12 px-4 py-12 sm:px-6 lg:min-h-[calc(100vh-4rem)] lg:grid-cols-2 lg:py-10">
+      <div className="mx-auto flex w-full max-w-sm flex-col justify-center">
+        <h1 className="text-3xl font-semibold tracking-tight text-white">Welcome back</h1>
+        <p className="mt-3 text-sm leading-6 text-slate-400">
+          Sign in to continue your course, or start the chapter your schedule has queued up.
+        </p>
 
-      {error ? (
-        <div className="mt-6">
-          <Callout tone="danger">{error}</Callout>
+        {error ? (
+          <div className="mt-6">
+            <Callout tone="danger">{error}</Callout>
+          </div>
+        ) : null}
+
+        <form onSubmit={handleSubmit} className="mt-8 space-y-5" noValidate>
+          <Field label="Email address" htmlFor="email">
+            <TextInput
+              id="email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              autoComplete="email"
+              placeholder="you@example.com"
+              required
+            />
+          </Field>
+
+          <Field label="Password" htmlFor="password">
+            <PasswordInput
+              id="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </Field>
+
+          <Button type="submit" size="lg" block loading={submitting}>
+            Sign in
+          </Button>
+        </form>
+
+        <div className="mt-8 border-t border-white/[0.07] pt-6 text-sm text-slate-400">
+          <p>
+            No account yet?{' '}
+            <Link to="/apply" className="link">
+              Apply for a place
+            </Link>
+          </p>
+          <p className="mt-2">
+            Admitted already?{' '}
+            <Link to="/register" className="link">
+              Redeem your access code
+            </Link>
+          </p>
         </div>
-      ) : null}
 
-      <form onSubmit={handleSubmit} className="panel mt-6 space-y-5 p-6" noValidate>
-        <Field label="Email address" htmlFor="email" required>
-          <TextInput
-            id="email"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            autoComplete="email"
-            required
-          />
-        </Field>
+        <AuthFooterNote>Sessions use short-lived tokens that rotate on every refresh.</AuthFooterNote>
+      </div>
 
-        <Field label="Password" htmlFor="password" required>
-          <TextInput
-            id="password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
-            required
-          />
-        </Field>
-
-        <Button type="submit" size="lg" block loading={submitting}>
-          Sign in
-        </Button>
-      </form>
-
-      <p className="mt-6 text-center text-sm text-slate-500">
-        No account yet?{' '}
-        <Link to="/apply" className="text-brand-300 hover:text-brand-200">
-          Apply for a place
-        </Link>
-      </p>
+      <AuthAside />
     </div>
   );
 }

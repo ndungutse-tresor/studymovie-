@@ -10,7 +10,8 @@
     "start": "node dist/index.js",
     "seed": "tsx src/db/seed.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "migrate": "tsx src/db/migrate.ts"
+    "migrate": "tsx src/db/migrate.ts",
+    "sync-movies": "tsx src/db/sync-movies.ts"
   },
   "dependencies": {
     "@types/pg": "^8.23.1",

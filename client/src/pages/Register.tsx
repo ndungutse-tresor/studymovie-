@@ -2,8 +2,9 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { Button, Callout, Field, TextInput } from '../components/ui';
+import { Button, Callout, Field, PasswordInput, TextInput } from '../components/ui';
 import { Icon } from '../components/Icon';
+import { AuthAside } from '../components/AuthAside';
 
 const RULES = [
   { test: (value: string) => value.length >= 10, label: 'At least 10 characters' },
@@ -34,6 +35,7 @@ export default function Register() {
   const satisfied = RULES.map((rule) => rule.test(password));
   const passwordValid = satisfied.every(Boolean);
   const matches = password.length > 0 && password === confirm;
+  const strength = satisfied.filter(Boolean).length;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -55,91 +57,134 @@ export default function Register() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-md px-4 py-14 sm:px-6">
-      <p className="eyebrow">Step 2 of 2</p>
-      <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">Create your account</h1>
-      <p className="mt-3 text-sm leading-7 text-slate-400">
-        Enter the access code from your admission. You will be enrolled in your track’s entry course and
-        given a starting study schedule automatically.
-      </p>
+    <div className="mx-auto grid w-full max-w-6xl gap-12 px-4 py-12 sm:px-6 lg:min-h-[calc(100vh-4rem)] lg:grid-cols-2 lg:py-10">
+      <div className="mx-auto flex w-full max-w-sm flex-col justify-center">
+        <Stepper />
 
-      {error ? (
-        <div className="mt-6">
-          <Callout tone="danger">{error}</Callout>
-        </div>
-      ) : null}
-
-      <form onSubmit={handleSubmit} className="panel mt-6 space-y-5 p-6" noValidate>
-        <Field label="Access code" htmlFor="accessCode" required>
-          <TextInput
-            id="accessCode"
-            value={accessCode}
-            onChange={(event) => setAccessCode(event.target.value.toUpperCase())}
-            placeholder="SR-XXXX-XXXX"
-            className="font-mono tracking-[0.15em]"
-            autoComplete="one-time-code"
-            required
-          />
-        </Field>
-
-        <Field label="Password" htmlFor="password" required>
-          <TextInput
-            id="password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="new-password"
-            required
-          />
-        </Field>
-
-        <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-          {RULES.map((rule, index) => (
-            <li
-              key={rule.label}
-              className={`flex items-center gap-1.5 text-xs ${
-                satisfied[index] ? 'text-emerald-300' : 'text-slate-500'
-              }`}
-            >
-              <Icon name={satisfied[index] ? 'check-circle' : 'close'} size={13} />
-              {rule.label}
-            </li>
-          ))}
-        </ul>
-
-        <Field
-          label="Confirm password"
-          htmlFor="confirm"
-          required
-          error={confirm.length > 0 && !matches ? 'The two passwords do not match.' : undefined}
-        >
-          <TextInput
-            id="confirm"
-            type="password"
-            value={confirm}
-            onChange={(event) => setConfirm(event.target.value)}
-            invalid={confirm.length > 0 && !matches}
-            autoComplete="new-password"
-            required
-          />
-        </Field>
-
-        <p className="hint">
-          Your time zone is set to <span className="text-slate-300">{timezone}</span>. Schedule reminders
-          use it, and you can change it later in settings.
+        <h1 className="mt-8 text-3xl font-semibold tracking-tight text-white">Create your account</h1>
+        <p className="mt-3 text-sm leading-6 text-slate-400">
+          Enter the access code from your admission. You will be enrolled in your track’s entry course and given a
+          starting study schedule automatically.
         </p>
 
-        <Button type="submit" size="lg" block loading={submitting} iconAfter="arrow-right">
-          Create account
-        </Button>
-      </form>
+        {error ? (
+          <div className="mt-6">
+            <Callout tone="danger">{error}</Callout>
+          </div>
+        ) : null}
 
-      <p className="mt-6 text-center text-sm text-slate-500">
-        Not approved yet?{' '}
-        <Link to="/apply" className="text-brand-300 hover:text-brand-200">
-          Submit an application
-        </Link>
-      </p>
+        <form onSubmit={handleSubmit} className="mt-8 space-y-5" noValidate>
+          <Field label="Access code" htmlFor="accessCode">
+            <TextInput
+              id="accessCode"
+              value={accessCode}
+              onChange={(event) => setAccessCode(event.target.value.toUpperCase())}
+              placeholder="SR-XXXX-XXXX"
+              className="font-mono tracking-[0.15em]"
+              autoComplete="one-time-code"
+              required
+            />
+          </Field>
+
+          <div>
+            <Field label="Password" htmlFor="password">
+              <PasswordInput
+                id="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="new-password"
+                required
+              />
+            </Field>
+
+            <div className="mt-2.5 grid grid-cols-4 gap-1.5" aria-hidden="true">
+              {RULES.map((rule, index) => (
+                <span
+                  key={rule.label}
+                  className={`h-1 rounded-full transition ${
+                    index < strength ? (strength === RULES.length ? 'bg-emerald-400' : 'bg-brand-400') : 'bg-white/10'
+                  }`}
+                />
+              ))}
+            </div>
+
+            <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
+              {RULES.map((rule, index) => (
+                <li
+                  key={rule.label}
+                  className={`flex items-center gap-1.5 text-xs transition ${
+                    satisfied[index] ? 'text-emerald-300' : 'text-slate-500'
+                  }`}
+                >
+                  <Icon name={satisfied[index] ? 'check-circle' : 'close'} size={13} />
+                  {rule.label}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <Field
+            label="Confirm password"
+            htmlFor="confirm"
+            error={confirm.length > 0 && !matches ? 'The two passwords do not match.' : undefined}
+          >
+            <PasswordInput
+              id="confirm"
+              value={confirm}
+              onChange={(event) => setConfirm(event.target.value)}
+              invalid={confirm.length > 0 && !matches}
+              autoComplete="new-password"
+              required
+            />
+          </Field>
+
+          <p className="flex items-start gap-2 rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2.5 text-xs leading-5 text-slate-400">
+            <Icon name="globe" size={14} className="mt-0.5 shrink-0 text-slate-500" />
+            <span>
+              Time zone detected as <span className="font-medium text-slate-200">{timezone}</span>. Reminders use it,
+              and you can change it later in settings.
+            </span>
+          </p>
+
+          <Button type="submit" size="lg" block loading={submitting} iconAfter="arrow-right">
+            Create account
+          </Button>
+        </form>
+
+        <p className="mt-8 border-t border-white/[0.07] pt-6 text-sm text-slate-400">
+          Not approved yet?{' '}
+          <Link to="/apply" className="link">
+            Submit an application
+          </Link>
+        </p>
+      </div>
+
+      <AuthAside
+        title="One code, one account."
+        points={[
+          'Your access code can be used exactly once',
+          'You are enrolled in your track’s entry course',
+          'A starting study schedule is created for you',
+        ]}
+      />
     </div>
+  );
+}
+
+function Stepper() {
+  return (
+    <ol className="flex items-center gap-3 text-xs font-medium">
+      <li className="flex items-center gap-2 text-slate-400">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300">
+          <Icon name="check" size={12} />
+        </span>
+        Apply
+      </li>
+      <li className="h-px w-8 bg-white/15" aria-hidden="true" />
+      <li className="flex items-center gap-2 text-white" aria-current="step">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-2xs text-white">2</span>
+        Create account
+      </li>
+    </ol>
   );
 }

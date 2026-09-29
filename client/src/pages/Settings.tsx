@@ -1,10 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { ApiError, api } from '../lib/api';
 import type { User } from '../lib/types';
 import { useAuth } from '../context/AuthContext';
 import { useAlerts } from '../context/AlertContext';
-import { Badge, Button, Callout, Field, PageHeader, Select, TextInput } from '../components/ui';
-import { Icon } from '../components/Icon';
+import { Badge, Button, Callout, Field, PageHeader, PasswordInput, Select, TextInput } from '../components/ui';
+import { Icon, type IconName } from '../components/Icon';
 
 interface RewardHistoryItem {
   id: string;
@@ -32,6 +32,14 @@ const COMMON_ZONES = [
   'Asia/Singapore',
   'Australia/Sydney',
 ];
+
+const STATUS_STYLE: Record<string, { icon: IconName; tone: string; label: string }> = {
+  GRANTED: { icon: 'ticket', tone: 'border-reel-400/30 bg-reel-400/10 text-reel-200', label: 'Earned' },
+  ACTIVE: { icon: 'play', tone: 'border-reel-400/40 bg-reel-400/15 text-reel-100', label: 'Watching' },
+  EXPIRED: { icon: 'check', tone: 'border-white/10 bg-white/[0.04] text-slate-300', label: 'Completed' },
+  ENDED: { icon: 'check', tone: 'border-white/10 bg-white/[0.04] text-slate-300', label: 'Ended early' },
+  FORFEITED: { icon: 'close', tone: 'border-white/10 bg-white/[0.04] text-slate-500', label: 'Forfeited' },
+};
 
 export default function Settings() {
   const { user, updateUser } = useAuth();
@@ -105,156 +113,159 @@ export default function Settings() {
     <>
       <PageHeader eyebrow="Account" title="Settings" description="Your profile, time zone, security, and viewing history." />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <form onSubmit={saveProfile} className="panel space-y-5 p-6">
-          <h2 className="text-sm font-semibold text-white">Profile</h2>
+      <div className="divide-y divide-white/[0.06]">
+        <SettingsSection title="Profile" description="How you appear, and the time zone reminders and session times use.">
+          <form onSubmit={saveProfile} className="panel">
+            <div className="space-y-5 p-6">
+              {profileState.error ? <Callout tone="danger">{profileState.error}</Callout> : null}
+              {profileState.message ? <Callout tone="success">{profileState.message}</Callout> : null}
 
-          {profileState.error ? <Callout tone="danger">{profileState.error}</Callout> : null}
-          {profileState.message ? <Callout tone="success">{profileState.message}</Callout> : null}
+              <Field label="Full name" htmlFor="fullName" required>
+                <TextInput id="fullName" value={fullName} onChange={(event) => setFullName(event.target.value)} required />
+              </Field>
 
-          <Field label="Full name" htmlFor="fullName" required>
-            <TextInput
-              id="fullName"
-              value={fullName}
-              onChange={(event) => setFullName(event.target.value)}
-              required
-            />
-          </Field>
+              <Field label="Email address" htmlFor="email" hint="Your email is fixed to the application it came from.">
+                <TextInput id="email" value={user?.email ?? ''} readOnly disabled />
+              </Field>
 
-          <Field label="Email address" htmlFor="email" hint="Your email is fixed to the application it came from.">
-            <TextInput id="email" value={user?.email ?? ''} readOnly disabled />
-          </Field>
-
-          <Field
-            label="Time zone"
-            htmlFor="timezone"
-            hint="Schedule reminders and session times are shown in this zone."
-            required
-          >
-            <Select id="timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)}>
-              {zones.map((zone) => (
-                <option key={zone} value={zone}>
-                  {zone}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          <Button type="submit" loading={profileState.saving}>
-            Save profile
-          </Button>
-        </form>
-
-        <div className="space-y-6">
-          <form onSubmit={savePassword} className="panel space-y-5 p-6">
-            <h2 className="text-sm font-semibold text-white">Password</h2>
-
-            {passwordState.error ? <Callout tone="danger">{passwordState.error}</Callout> : null}
-            {passwordState.message ? <Callout tone="success">{passwordState.message}</Callout> : null}
-
-            <Field label="Current password" htmlFor="currentPassword" required>
-              <TextInput
-                id="currentPassword"
-                type="password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-                autoComplete="current-password"
-                required
-              />
-            </Field>
-
-            <Field
-              label="New password"
-              htmlFor="newPassword"
-              hint="At least 10 characters, with upper case, lower case, and a number."
-              required
-            >
-              <TextInput
-                id="newPassword"
-                type="password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                autoComplete="new-password"
-                required
-              />
-            </Field>
-
-            <Button type="submit" loading={passwordState.saving}>
-              Change password
-            </Button>
-          </form>
-
-          <section className="panel p-6">
-            <h2 className="text-sm font-semibold text-white">Notifications</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-400">
-              Desktop notifications let a study reminder reach you when this tab is in the background.
-              In-app reminders work either way.
-            </p>
-            <div className="mt-4 flex items-center gap-3">
-              {notificationsEnabled ? (
-                <Badge tone="border-emerald-500/30 bg-emerald-500/10 text-emerald-300" icon="check">
-                  Enabled
-                </Badge>
-              ) : (
-                <Button variant="secondary" size="sm" icon="bell" onClick={() => void requestNotifications()}>
-                  Allow notifications
-                </Button>
-              )}
+              <Field label="Time zone" htmlFor="timezone" hint="Schedule reminders and session times are shown in this zone." required>
+                <Select id="timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)}>
+                  {zones.map((zone) => (
+                    <option key={zone} value={zone}>
+                      {zone}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
             </div>
-          </section>
-        </div>
-      </div>
+            <div className="flex justify-end border-t border-white/[0.06] bg-white/[0.015] px-6 py-4">
+              <Button type="submit" loading={profileState.saving}>
+                Save profile
+              </Button>
+            </div>
+          </form>
+        </SettingsSection>
 
-      <section className="panel mt-6 p-6">
-        <h2 className="text-sm font-semibold text-white">Viewing history</h2>
-        {history.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">
-            No viewing sessions yet. Pass a chapter exam to earn your first one.
-          </p>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[38rem] text-sm">
-              <thead>
-                <tr className="border-b border-ink-700 text-left text-xs uppercase tracking-wider text-slate-500">
-                  <th className="pb-3 pr-4 font-medium">Film</th>
-                  <th className="pb-3 pr-4 font-medium">Earned by</th>
-                  <th className="pb-3 pr-4 font-medium">Granted</th>
-                  <th className="pb-3 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-ink-800">
-                {history.map((entry) => (
-                  <tr key={entry.id}>
-                    <td className="py-3 pr-4 text-slate-200">{entry.movieTitle ?? 'Not started'}</td>
-                    <td className="py-3 pr-4 text-slate-400">
-                      <span className="block">{entry.chapterTitle}</span>
-                      <span className="text-xs text-slate-600">{entry.courseTitle}</span>
-                    </td>
-                    <td className="py-3 pr-4 text-slate-400">
-                      {entry.minutesWatched} / {entry.minutesGranted} min
-                    </td>
-                    <td className="py-3">
-                      <span className="inline-flex items-center gap-1.5 text-xs text-slate-400">
-                        <Icon
-                          name={
-                            entry.status === 'EXPIRED' || entry.status === 'ENDED'
-                              ? 'check'
-                              : entry.status === 'ACTIVE'
-                                ? 'play'
-                                : 'clock'
-                          }
-                          size={12}
-                        />
-                        {entry.status.toLowerCase()}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <SettingsSection title="Password" description="Changing it signs out every other session on your account.">
+          <form onSubmit={savePassword} className="panel">
+            <div className="space-y-5 p-6">
+              {passwordState.error ? <Callout tone="danger">{passwordState.error}</Callout> : null}
+              {passwordState.message ? <Callout tone="success">{passwordState.message}</Callout> : null}
+
+              <Field label="Current password" htmlFor="currentPassword" required>
+                <PasswordInput
+                  id="currentPassword"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+              </Field>
+
+              <Field
+                label="New password"
+                htmlFor="newPassword"
+                hint="At least 10 characters, with upper case, lower case, and a number."
+                required
+              >
+                <PasswordInput
+                  id="newPassword"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  autoComplete="new-password"
+                  required
+                />
+              </Field>
+            </div>
+            <div className="flex justify-end border-t border-white/[0.06] bg-white/[0.015] px-6 py-4">
+              <Button type="submit" loading={passwordState.saving}>
+                Change password
+              </Button>
+            </div>
+          </form>
+        </SettingsSection>
+
+        <SettingsSection
+          title="Notifications"
+          description="Desktop notifications let a study reminder reach you when this tab is in the background."
+        >
+          <div className="panel flex flex-wrap items-center justify-between gap-4 p-6">
+            <div className="flex items-start gap-3.5">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.05] text-slate-400 ring-1 ring-inset ring-white/10">
+                <Icon name="bell" size={18} />
+              </span>
+              <div>
+                <p className="text-sm font-medium text-slate-100">Desktop notifications</p>
+                <p className="mt-0.5 text-sm text-slate-500">In-app reminders work either way.</p>
+              </div>
+            </div>
+            {notificationsEnabled ? (
+              <Badge tone="border-emerald-400/30 bg-emerald-500/10 text-emerald-300" icon="check">
+                Enabled
+              </Badge>
+            ) : (
+              <Button variant="secondary" size="sm" icon="bell" onClick={() => void requestNotifications()}>
+                Allow notifications
+              </Button>
+            )}
           </div>
-        )}
-      </section>
+        </SettingsSection>
+
+        <SettingsSection title="Viewing history" description="Every session you have earned, and how much of it you used.">
+          {history.length === 0 ? (
+            <div className="panel p-6 text-sm text-slate-500">
+              No viewing sessions yet. Pass a chapter exam to earn your first one.
+            </div>
+          ) : (
+            <div className="panel overflow-x-auto">
+              <table className="w-full min-w-[36rem] text-sm">
+                <thead>
+                  <tr className="border-b border-white/[0.06] text-left text-xs text-slate-500">
+                    <th className="px-5 py-3 font-medium">Film</th>
+                    <th className="px-5 py-3 font-medium">Earned by</th>
+                    <th className="px-5 py-3 font-medium">Watched</th>
+                    <th className="px-5 py-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.05]">
+                  {history.map((entry) => {
+                    const style = STATUS_STYLE[entry.status] ?? STATUS_STYLE.EXPIRED;
+                    return (
+                      <tr key={entry.id} className="transition hover:bg-white/[0.015]">
+                        <td className="px-5 py-3.5 font-medium text-slate-100">{entry.movieTitle ?? 'Not started'}</td>
+                        <td className="px-5 py-3.5 text-slate-400">
+                          <span className="block text-slate-300">{entry.chapterTitle}</span>
+                          <span className="text-xs text-slate-600">{entry.courseTitle}</span>
+                        </td>
+                        <td className="px-5 py-3.5 tabular-nums text-slate-400">
+                          {entry.minutesWatched} / {entry.minutesGranted} min
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <Badge tone={style.tone} icon={style.icon}>
+                            {style.label}
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SettingsSection>
+      </div>
     </>
+  );
+}
+
+function SettingsSection({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+  return (
+    <section className="grid gap-5 py-8 first:pt-0 lg:grid-cols-[16rem_1fr] lg:gap-10">
+      <div>
+        <h2 className="section-title">{title}</h2>
+        <p className="mt-1.5 text-sm leading-6 text-slate-500">{description}</p>
+      </div>
+      <div className="min-w-0">{children}</div>
+    </section>
   );
 }

@@ -1,4 +1,5 @@
 import type { Level, ProgressState } from './types';
+import type { IconName } from '../components/Icon';
 
 export function clockFromSeconds(totalSeconds: number): string {
   const safe = Math.max(0, Math.floor(totalSeconds));
@@ -50,10 +51,11 @@ export const LEVEL_LABEL: Record<Level, string> = {
   ADVANCED: 'Advanced',
 };
 
-export const LEVEL_TONE: Record<Level, string> = {
-  BEGINNER: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
-  INTERMEDIATE: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
-  ADVANCED: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+/** Difficulty as a count of filled bars, so level reads without a colour of its own. */
+export const LEVEL_RANK: Record<Level, number> = {
+  BEGINNER: 1,
+  INTERMEDIATE: 2,
+  ADVANCED: 3,
 };
 
 export const STATE_LABEL: Record<ProgressState, string> = {
@@ -67,22 +69,62 @@ export const STATE_LABEL: Record<ProgressState, string> = {
 };
 
 export const STATE_TONE: Record<ProgressState, string> = {
-  LOCKED: 'border-ink-600 bg-ink-800/70 text-slate-500',
-  AVAILABLE: 'border-brand-500/30 bg-brand-500/10 text-brand-200',
-  STUDYING: 'border-brand-500/30 bg-brand-500/10 text-brand-200',
-  EXAM_READY: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
-  REWARD_READY: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
-  REWARD_ACTIVE: 'border-violet-500/40 bg-violet-500/15 text-violet-200',
-  COMPLETED: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
+  LOCKED: 'border-white/10 bg-white/[0.03] text-slate-500',
+  AVAILABLE: 'border-brand-400/25 bg-brand-500/10 text-brand-200',
+  STUDYING: 'border-brand-400/25 bg-brand-500/10 text-brand-200',
+  EXAM_READY: 'border-brand-400/40 bg-brand-500/15 text-brand-100',
+  REWARD_READY: 'border-reel-400/30 bg-reel-400/10 text-reel-200',
+  REWARD_ACTIVE: 'border-reel-400/40 bg-reel-400/15 text-reel-100',
+  COMPLETED: 'border-emerald-400/25 bg-emerald-500/10 text-emerald-300',
 };
 
-/** Deterministic gradient used for titles that have no poster artwork. */
-export function posterGradient(seed: string): string {
+/** Hex pairs for each course accent, used for covers and thumbnails. */
+const ACCENTS: Record<string, [string, string]> = {
+  rose: ['#f43f5e', '#881337'],
+  cyan: ['#22d3ee', '#155e75'],
+  indigo: ['#818cf8', '#312e81'],
+  orange: ['#fb923c', '#7c2d12'],
+  sky: ['#38bdf8', '#0c4a6e'],
+  emerald: ['#34d399', '#064e3b'],
+  violet: ['#a78bfa', '#4c1d95'],
+  amber: ['#fbbf24', '#78350f'],
+};
+
+export function accentColors(accent: string | undefined): [string, string] {
+  return ACCENTS[accent ?? ''] ?? ACCENTS.indigo;
+}
+
+export function categoryIcon(category: string): IconName {
+  const key = category.toLowerCase();
+  if (key.includes('security')) return 'shield';
+  if (key.includes('cloud')) return 'cloud';
+  if (key.includes('devops')) return 'branch';
+  if (key.includes('data')) return 'database';
+  if (key.includes('system')) return 'terminal';
+  if (key.includes('infrastructure')) return 'server';
+  if (key.includes('software')) return 'code';
+  return 'layers';
+}
+
+function hashSeed(seed: string): number {
   let hash = 0;
   for (let index = 0; index < seed.length; index += 1) {
     hash = (hash * 31 + seed.charCodeAt(index)) % 360;
   }
-  const from = hash;
-  const to = (hash + 48) % 360;
-  return `linear-gradient(145deg, hsl(${from} 52% 26%), hsl(${to} 46% 14%))`;
+  return hash;
+}
+
+/** A muted, deterministic duotone for titles that have no poster artwork. */
+export function posterTones(seed: string): { from: string; to: string; glow: string } {
+  const hue = hashSeed(seed);
+  return {
+    from: `hsl(${hue} 26% 22%)`,
+    to: `hsl(${(hue + 28) % 360} 24% 8%)`,
+    glow: `hsl(${(hue + 12) % 360} 45% 55% / 0.28)`,
+  };
+}
+
+export function posterGradient(seed: string): string {
+  const tones = posterTones(seed);
+  return `radial-gradient(120% 80% at 20% 0%, ${tones.glow}, transparent 60%), linear-gradient(160deg, ${tones.from}, ${tones.to})`;
 }

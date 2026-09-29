@@ -85,9 +85,25 @@ export const config = {
 
   movies: {
     tmdbApiKey: process.env.TMDB_API_KEY ?? '',
-    cacheTtlMinutes: int('MOVIE_CACHE_TTL_MINUTES', 180),
     requestTimeoutMs: int('MOVIE_REQUEST_TIMEOUT_MS', 12_000),
+    /**
+     * A page view triggers a sync itself only when the library has gone this
+     * long without one — a safety net for when the scheduled job has not run.
+     */
+    syncStaleHours: int('MOVIE_SYNC_STALE_HOURS', 26),
+    /** YouTube Data API key; the YouTube source is off without it. */
+    youtubeApiKey: process.env.YOUTUBE_API_KEY ?? '',
+    /** Channel IDs (UC...), @handles, or playlist IDs (PL...), comma-separated. */
+    youtubeSources: (process.env.YOUTUBE_SOURCES ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
+    /** Shorter uploads are trailers and clips, not films. */
+    youtubeMinMinutes: int('YOUTUBE_MIN_MINUTES', 40),
   },
+
+  /** Shared secret Vercel Cron sends as a bearer token to scheduled endpoints. */
+  cronSecret: process.env.CRON_SECRET ?? '',
 
   admin: {
     email: process.env.ADMIN_EMAIL ?? 'admin@studyreel.io',

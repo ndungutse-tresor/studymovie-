@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError, api } from '../lib/api';
 import type { ChapterDetail, StudyStatus } from '../lib/types';
-import { LEVEL_LABEL, LEVEL_TONE, clockFromSeconds } from '../lib/format';
-import { renderMarkdown } from '../lib/markdown';
-import { Badge, Button, Callout, ProgressBar, Skeleton } from '../components/ui';
+import { clockFromSeconds } from '../lib/format';
+import { extractHeadings, renderMarkdown } from '../lib/markdown';
+import { Button, Callout, LevelIndicator, ProgressRing, Skeleton } from '../components/ui';
 import { Icon } from '../components/Icon';
 
 /**
@@ -21,6 +21,7 @@ export default function Study() {
   const [error, setError] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
   const [scrolled, setScrolled] = useState(0);
+  const [activeHeading, setActiveHeading] = useState<string | null>(null);
 
   const articleRef = useRef<HTMLDivElement>(null);
 
@@ -65,18 +66,27 @@ export default function Study() {
     return () => window.clearInterval(timer);
   }, [status?.examUnlocked, status]);
 
-  // Reading progress, purely for feedback.
+  const headings = useMemo(() => (chapter ? extractHeadings(chapter.content) : []), [chapter]);
+
+  // Reading progress and the current section, purely for feedback.
   useEffect(() => {
     function onScroll() {
       const element = articleRef.current;
       if (!element) return;
       const total = element.scrollHeight - window.innerHeight;
       setScrolled(total <= 0 ? 100 : Math.min(100, Math.max(0, (window.scrollY / total) * 100)));
+
+      let current: string | null = headings[0]?.id ?? null;
+      for (const heading of headings) {
+        const node = document.getElementById(heading.id);
+        if (node && node.getBoundingClientRect().top < 140) current = heading.id;
+      }
+      setActiveHeading(current);
     }
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
     return () => window.removeEventListener('scroll', onScroll);
-  }, [chapter]);
+  }, [chapter, headings]);
 
   const body = useMemo(() => (chapter ? renderMarkdown(chapter.content) : []), [chapter]);
 
@@ -107,8 +117,8 @@ export default function Study() {
 
   if (!chapter || !status) {
     return (
-      <div className="space-y-5">
-        <Skeleton className="h-6 w-48" />
+      <div className="mx-auto max-w-3xl space-y-5">
+        <Skeleton className="h-5 w-48" />
         <Skeleton className="h-10 w-3/4" />
         <Skeleton className="h-96" />
       </div>
@@ -121,104 +131,147 @@ export default function Study() {
     : 100;
 
   return (
-    <div className="mx-auto max-w-3xl pb-4">
-      <div className="fixed inset-x-0 top-0 z-40 h-0.5 bg-transparent">
-        <div className="h-full bg-brand-500 transition-[width]" style={{ width: `${scrolled}%` }} />
+    <div className="pb-4">
+      <div className="fixed inset-x-0 top-0 z-50 h-0.5 bg-transparent">
+        <div className="h-full bg-brand-400 transition-[width]" style={{ width: `${scrolled}%` }} />
       </div>
 
-      <Link
-        to={`/app/courses/${chapter.course.slug}`}
-        className="mb-6 inline-flex items-center gap-1.5 text-sm text-slate-400 transition hover:text-slate-200"
-      >
-        <Icon name="arrow-left" size={15} />
-        {chapter.course.title}
-      </Link>
+      <div className="grid gap-10 xl:grid-cols-[minmax(0,1fr)_14rem]">
+        <div className="mx-auto w-full max-w-3xl">
+          <nav className="mb-8 flex items-center gap-1.5 text-sm text-slate-500" aria-label="Breadcrumb">
+            <Link to="/app/courses" className="transition hover:text-slate-200">
+              Courses
+            </Link>
+            <Icon name="chevron-right" size={14} className="text-slate-700" />
+            <Link to={`/app/courses/${chapter.course.slug}`} className="truncate transition hover:text-slate-200">
+              {chapter.course.title}
+            </Link>
+          </nav>
 
-      <header className="mb-8">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={LEVEL_TONE[chapter.course.level]}>{LEVEL_LABEL[chapter.course.level]}</Badge>
-          <Badge>Chapter {chapter.position + 1}</Badge>
-          <Badge icon="clock">{chapter.estimatedMinutes} min</Badge>
-          <Badge icon="film" tone="border-violet-500/30 bg-violet-500/10 text-violet-300">
-            {chapter.rewardMinutes} min reward
-          </Badge>
-        </div>
-        <h1 className="mt-4 text-3xl font-bold leading-tight tracking-tight text-white">{chapter.title}</h1>
-        <p className="mt-3 text-base leading-7 text-slate-400">{chapter.summary}</p>
-      </header>
+          <header className="mb-10 border-b border-white/[0.07] pb-8">
+            <p className="text-sm font-medium text-brand-300">Chapter {chapter.position + 1}</p>
+            <h1 className="mt-2 text-3xl font-semibold leading-tight tracking-tight text-white sm:text-[2.5rem]">
+              {chapter.title}
+            </h1>
+            <p className="mt-4 text-lg leading-8 text-slate-400">{chapter.summary}</p>
+            <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-500">
+              <LevelIndicator level={chapter.course.level} className="text-slate-400" />
+              <span className="flex items-center gap-1.5">
+                <Icon name="clock" size={14} />
+                {chapter.estimatedMinutes} min read
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Icon name="target" size={14} />
+                {chapter.passMark}% to pass
+              </span>
+              <span className="flex items-center gap-1.5 text-reel-300">
+                <Icon name="ticket" size={14} />
+                {chapter.rewardMinutes} min reward
+              </span>
+            </div>
+          </header>
 
-      <article ref={articleRef} className="prose-lesson panel px-6 py-8 sm:px-9 sm:py-10">
-        {body}
-      </article>
+          <article ref={articleRef} className="prose-lesson">
+            {body}
+          </article>
 
-      <div className="sticky bottom-4 z-30 mt-7">
-        <div className="panel flex flex-wrap items-center justify-between gap-5 border-ink-600 bg-ink-900/95 p-5 shadow-lift backdrop-blur">
-          <div className="min-w-0 flex-1">
-            {alreadyPassed ? (
-              <>
-                <p className="text-sm font-semibold text-emerald-300">Chapter already passed</p>
-                <p className="mt-1 text-sm text-slate-400">
-                  Best score {chapter.bestScore}%. You can reread this material at any time.
-                </p>
-              </>
-            ) : status.examUnlocked ? (
-              <>
-                <p className="flex items-center gap-2 text-sm font-semibold text-emerald-300">
-                  <Icon name="check-circle" size={16} />
-                  Study requirement met
-                </p>
-                <p className="mt-1 text-sm text-slate-400">
-                  {chapter.questionCount} questions · {chapter.passMark}% to pass · {chapter.rewardMinutes}{' '}
-                  minutes of viewing time if you clear it.
-                </p>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-between gap-4">
-                  <p className="text-sm font-medium text-slate-300">
-                    Exam unlocks in{' '}
-                    <span className="font-mono font-semibold text-white">
-                      {clockFromSeconds(status.remainingSeconds)}
+          <div className="sticky bottom-4 z-30 mt-12">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/10 bg-ink-850/95 p-4 shadow-lift backdrop-blur-xl sm:px-5">
+              <div className="flex min-w-0 flex-1 items-center gap-4">
+                {alreadyPassed ? (
+                  <>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300">
+                      <Icon name="check" size={18} />
                     </span>
-                  </p>
-                  <span className="text-xs text-slate-500">
-                    minimum {Math.ceil(status.requiredSeconds / 60)} min
-                  </span>
-                </div>
-                <div className="mt-2.5">
-                  <ProgressBar value={gatePercent} />
-                </div>
-              </>
-            )}
-            {error ? <p className="field-error">{error}</p> : null}
-          </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-white">Chapter passed</p>
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        Best score {chapter.bestScore}%. Reread this material at any time.
+                      </p>
+                    </div>
+                  </>
+                ) : status.examUnlocked ? (
+                  <>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300">
+                      <Icon name="unlock" size={18} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-white">The exam is open</p>
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        {chapter.questionCount} questions · {chapter.passMark}% to pass · {chapter.rewardMinutes} min of
+                        viewing time if you clear it
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <ProgressRing value={gatePercent} size={40} stroke={3.5}>
+                      <Icon name="lock" size={13} className="text-slate-400" />
+                    </ProgressRing>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-200">
+                        Exam unlocks in{' '}
+                        <span className="font-mono font-semibold tabular-nums text-white">
+                          {clockFromSeconds(status.remainingSeconds)}
+                        </span>
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        Minimum study time is {Math.ceil(status.requiredSeconds / 60)} minutes
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
 
-          {alreadyPassed ? (
-            chapter.nextChapter ? (
-              <Button
-                size="lg"
-                onClick={() => navigate(`/app/study/${chapter.nextChapter!.id}`)}
-                iconAfter="arrow-right"
-              >
-                Next chapter
-              </Button>
-            ) : (
-              <Button size="lg" variant="secondary" onClick={() => navigate(`/app/courses/${chapter.course.slug}`)}>
-                Back to course
-              </Button>
-            )
-          ) : (
-            <Button
-              size="lg"
-              loading={finishing}
-              disabled={!status.examUnlocked}
-              onClick={() => void handleFinish()}
-              iconAfter="arrow-right"
-            >
-              {status.examUnlocked ? 'Start the exam' : 'Keep studying'}
-            </Button>
-          )}
+              {alreadyPassed ? (
+                chapter.nextChapter ? (
+                  <Button onClick={() => navigate(`/app/study/${chapter.nextChapter!.id}`)} iconAfter="arrow-right">
+                    Next chapter
+                  </Button>
+                ) : (
+                  <Button variant="secondary" onClick={() => navigate(`/app/courses/${chapter.course.slug}`)}>
+                    Back to course
+                  </Button>
+                )
+              ) : (
+                <Button
+                  loading={finishing}
+                  disabled={!status.examUnlocked}
+                  onClick={() => void handleFinish()}
+                  iconAfter={status.examUnlocked ? 'arrow-right' : undefined}
+                  icon={status.examUnlocked ? undefined : 'lock'}
+                >
+                  {status.examUnlocked ? 'Start the exam' : 'Exam locked'}
+                </Button>
+              )}
+              {error ? <p className="field-error w-full">{error}</p> : null}
+            </div>
+          </div>
         </div>
+
+        {headings.length > 1 ? (
+          <aside className="hidden xl:block">
+            <div className="sticky top-10">
+              <p className="text-2xs font-semibold uppercase tracking-[0.14em] text-slate-500">On this page</p>
+              <ul className="mt-3 space-y-0.5 border-l border-white/[0.08]">
+                {headings.map((heading) => (
+                  <li key={heading.id}>
+                    <a
+                      href={`#${heading.id}`}
+                      className={`-ml-px block border-l py-1.5 pl-3.5 text-[0.8rem] leading-5 transition ${
+                        activeHeading === heading.id
+                          ? 'border-brand-400 text-white'
+                          : 'border-transparent text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      {heading.text}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </aside>
+        ) : null}
       </div>
     </div>
   );
