@@ -237,6 +237,9 @@ export default function AdminDashboard() {
           <LinkButton to="/admin/movies" variant="secondary" icon="film" block className="mt-5">
             Manage movies
           </LinkButton>
+          <LinkButton to="/admin/learning" variant="secondary" icon="library" block className="mt-2">
+            Create learning course
+          </LinkButton>
           <Button className="mt-2 w-full" icon="refresh" loading={syncing} onClick={() => void syncMovies()}>
             Sync movie sources
           </Button>

@@ -13,6 +13,7 @@
     "dev:client": "npm --workspace client run dev",
     "build": "npm --workspace server run build && npm --workspace client run build",
     "start": "npm --workspace server run start",
+    "render-start": "npm run migrate && npm run seed && npm run start",
     "seed": "npm --workspace server run seed",
     "typecheck": "npm --workspace server run typecheck && npm --workspace client run typecheck",
     "lint": "npm run typecheck",

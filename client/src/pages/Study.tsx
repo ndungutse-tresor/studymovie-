@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError, api } from '../lib/api';
-import type { ChapterDetail, StudyStatus } from '../lib/types';
+import type { ChapterDetail, ChapterResource, StudyStatus } from '../lib/types';
 import { clockFromSeconds } from '../lib/format';
 import { extractHeadings, renderMarkdown } from '../lib/markdown';
 import { Button, Callout, LevelIndicator, ProgressRing, Skeleton } from '../components/ui';
 import { Icon } from '../components/Icon';
+import { StudyTutor } from '../components/StudyTutor';
 
 /**
  * The reading view. A local ticker drives the visible countdown, but the gate
@@ -175,6 +176,17 @@ export default function Study() {
             {body}
           </article>
 
+          {chapter.resources.length > 0 ? (
+            <section className="mt-10 space-y-4" aria-label="Lesson resources">
+              <h2 className="section-title text-lg">Lesson resources</h2>
+              {chapter.resources.map((resource) => (
+                <StudyResource key={resource.id} resource={resource} />
+              ))}
+            </section>
+          ) : null}
+
+          <StudyTutor chapterId={chapter.id} />
+
           <div className="sticky bottom-4 z-30 mt-12">
             <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/10 bg-ink-850/95 p-4 shadow-lift backdrop-blur-xl sm:px-5">
               <div className="flex min-w-0 flex-1 items-center gap-4">
@@ -274,5 +286,32 @@ export default function Study() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+function StudyResource({ resource }: { resource: ChapterResource }) {
+  if (resource.mimeType.startsWith('video/')) {
+    return (
+      <figure className="overflow-hidden border border-white/10 bg-black">
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        <video src={resource.url} controls preload="metadata" className="aspect-video w-full" />
+        <figcaption className="px-3 py-2 text-xs text-slate-400">{resource.name}</figcaption>
+      </figure>
+    );
+  }
+
+  if (resource.mimeType === 'application/pdf') {
+    return (
+      <details className="border border-white/10 bg-ink-900">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-slate-200">Read {resource.name}</summary>
+        <iframe src={resource.url} title={resource.name} className="h-[70vh] min-h-96 w-full border-0 bg-white" />
+      </details>
+    );
+  }
+
+  return (
+    <p className="border-l-2 border-brand-400 px-4 py-2 text-sm text-slate-400">
+      Extracted lesson text from {resource.name} is included above.
+    </p>
   );
 }

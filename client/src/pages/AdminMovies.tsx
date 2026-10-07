@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api } from '../lib/api';
 import type { Movie } from '../lib/types';
-import { Button, Callout, Field, LinkButton, TextArea, TextInput } from '../components/ui';
+import { Button, Callout, Field, LinkButton, Select, TextArea, TextInput } from '../components/ui';
+
+type ReelPlatform = 'facebook' | 'tiktok' | 'instagram';
 
 interface MovieDraft {
   title: string;
@@ -11,6 +13,8 @@ interface MovieDraft {
   runtimeMinutes: string;
   posterUrl: string;
   sourceUrl: string;
+  youtubeUrl: string;
+  reelUrl: string;
   streamUrl: string;
   embedUrl: string;
   licence: string;
@@ -24,12 +28,16 @@ const EMPTY_DRAFT: MovieDraft = {
   runtimeMinutes: '',
   posterUrl: '',
   sourceUrl: '',
+  youtubeUrl: '',
+  reelUrl: '',
   streamUrl: '',
   embedUrl: '',
   licence: '',
 };
 
 function draftFromMovie(movie: Movie): MovieDraft {
+  const youtubeId = youtubeVideoId(movie.embedUrl ?? '');
+  const reel = reelSourceFromEmbed(movie.embedUrl ?? '');
   return {
     title: movie.title,
     year: movie.year?.toString() ?? '',
@@ -38,10 +46,28 @@ function draftFromMovie(movie: Movie): MovieDraft {
     runtimeMinutes: movie.runtimeMinutes?.toString() ?? '',
     posterUrl: movie.posterUrl ?? '',
     sourceUrl: movie.sourceUrl ?? '',
+    youtubeUrl: youtubeId ? `https://www.youtube.com/watch?v=${youtubeId}` : '',
+    reelUrl: reel?.url ?? '',
     streamUrl: movie.streamUrl ?? '',
     embedUrl: movie.embedUrl ?? '',
     licence: movie.licence,
   };
+}
+
+function youtubeVideoId(value: string): string | null {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    if (host === 'youtu.be') {
+      const id = url.pathname.split('/').filter(Boolean)[0];
+      return id && /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+    }
+    if (!['youtube.com', 'm.youtube.com', 'youtube-nocookie.com'].includes(host)) return null;
+    const id = url.searchParams.get('v') ?? url.pathname.match(/^\/(?:embed|shorts|live)\/([^/?]+)/)?.[1];
+    return id && /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
 }
 
 function moviePayload(draft: MovieDraft) {
@@ -67,7 +93,8 @@ export default function AdminMovies() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [videoSource, setVideoSource] = useState<'link' | 'upload'>('link');
+  const [videoSource, setVideoSource] = useState<'link' | 'youtube' | 'reels' | 'upload'>('link');
+  const [reelPlatform, setReelPlatform] = useState<ReelPlatform>('instagram');
   const [storageMode, setStorageMode] = useState<'object' | 'local' | 'disabled'>('disabled');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -104,15 +131,46 @@ export default function AdminMovies() {
   function editMovie(movie: Movie) {
     setSelectedId(movie.id);
     setDraft(draftFromMovie(movie));
-    setVideoSource(movie.streamUrl?.startsWith('/api/movies/uploads/') ? 'upload' : 'link');
+    setVideoSource(
+      movie.streamUrl?.startsWith('/api/movies/uploads/')
+        ? 'upload'
+        : reelSourceFromEmbed(movie.embedUrl ?? '')
+          ? 'reels'
+          : youtubeVideoId(movie.embedUrl ?? '')
+            ? 'youtube'
+            : 'link',
+    );
+    const reel = reelSourceFromEmbed(movie.embedUrl ?? '');
+    if (reel) setReelPlatform(reel.platform);
     setError(null);
     setNotice(null);
   }
 
-  function changeVideoSource(source: 'link' | 'upload') {
+  function changeVideoSource(source: 'link' | 'youtube' | 'reels' | 'upload') {
     if (source === videoSource) return;
     setVideoSource(source);
-    setDraft((current) => ({ ...current, streamUrl: '', embedUrl: '' }));
+    setDraft((current) => ({ ...current, streamUrl: '', embedUrl: '', youtubeUrl: '', reelUrl: '' }));
+  }
+
+  function updateYoutubeUrl(value: string) {
+    const id = youtubeVideoId(value);
+    setDraft((current) => ({
+      ...current,
+      youtubeUrl: value,
+      reelUrl: '',
+      streamUrl: '',
+      embedUrl: id ? `https://www.youtube-nocookie.com/embed/${id}` : '',
+    }));
+  }
+
+  function updateReelUrl(value: string) {
+    const embedUrl = reelEmbedUrl(value, reelPlatform);
+    setDraft((current) => ({ ...current, reelUrl: value, youtubeUrl: '', streamUrl: '', embedUrl: embedUrl ?? '' }));
+  }
+
+  function changeReelPlatform(platform: ReelPlatform) {
+    setReelPlatform(platform);
+    setDraft((current) => ({ ...current, reelUrl: '', streamUrl: '', embedUrl: '' }));
   }
 
   async function uploadVideo(file: File | undefined) {
@@ -286,7 +344,7 @@ export default function AdminMovies() {
             <TextArea rows={3} maxLength={5000} value={draft.synopsis} onChange={(event) => updateDraft('synopsis', event.target.value)} />
           </Field>
           <Field label="Video source" required>
-            <div className="grid grid-cols-2 gap-1 rounded-lg border border-white/[0.08] bg-ink-900 p-1" role="group" aria-label="Video source">
+            <div className="grid grid-cols-4 gap-1 rounded-lg border border-white/[0.08] bg-ink-900 p-1" role="group" aria-label="Video source">
               <button
                 type="button"
                 aria-pressed={videoSource === 'link'}
@@ -294,6 +352,22 @@ export default function AdminMovies() {
                 className={`h-9 rounded-md px-3 text-sm font-medium transition ${videoSource === 'link' ? 'bg-white/[0.1] text-white' : 'text-slate-400 hover:text-white'}`}
               >
                 Hosted link
+              </button>
+              <button
+                type="button"
+                aria-pressed={videoSource === 'youtube'}
+                onClick={() => changeVideoSource('youtube')}
+                className={`h-9 rounded-md px-2 text-sm font-medium transition ${videoSource === 'youtube' ? 'bg-white/[0.1] text-white' : 'text-slate-400 hover:text-white'}`}
+              >
+                YouTube
+              </button>
+              <button
+                type="button"
+                aria-pressed={videoSource === 'reels'}
+                onClick={() => changeVideoSource('reels')}
+                className={`h-9 rounded-md px-2 text-sm font-medium transition ${videoSource === 'reels' ? 'bg-white/[0.1] text-white' : 'text-slate-400 hover:text-white'}`}
+              >
+                Reels
               </button>
               <button
                 type="button"
@@ -314,6 +388,43 @@ export default function AdminMovies() {
                 <TextInput type="url" value={draft.embedUrl} onChange={(event) => updateDraft('embedUrl', event.target.value)} placeholder="https://…" />
               </Field>
             </>
+          ) : videoSource === 'youtube' ? (
+            <Field label="YouTube video link" required hint="Paste a YouTube watch, share, or embed link. Unlisted videos work; subscribers are not required.">
+              <TextInput
+                type="url"
+                required
+                value={draft.youtubeUrl}
+                onChange={(event) => updateYoutubeUrl(event.target.value)}
+                placeholder="https://youtu.be/…"
+                aria-invalid={Boolean(draft.youtubeUrl && !youtubeVideoId(draft.youtubeUrl))}
+              />
+              {draft.youtubeUrl && !youtubeVideoId(draft.youtubeUrl) ? (
+                <p className="field-error">Enter a valid YouTube video link.</p>
+              ) : null}
+            </Field>
+          ) : videoSource === 'reels' ? (
+            <div className="space-y-4">
+              <Field label="Platform" required>
+                <Select value={reelPlatform} onChange={(event) => changeReelPlatform(event.target.value as ReelPlatform)}>
+                  <option value="instagram">Instagram Reels</option>
+                  <option value="tiktok">TikTok</option>
+                  <option value="facebook">Facebook Reels</option>
+                </Select>
+              </Field>
+              <Field label="Reel link" required hint="Use a public post link that allows embedding. Short redirect links may not work.">
+                <TextInput
+                  type="url"
+                  required
+                  value={draft.reelUrl}
+                  onChange={(event) => updateReelUrl(event.target.value)}
+                  placeholder={reelPlatform === 'instagram' ? 'https://instagram.com/reel/…' : reelPlatform === 'tiktok' ? 'https://tiktok.com/@…/video/…' : 'https://facebook.com/reel/…'}
+                  aria-invalid={Boolean(draft.reelUrl && !reelEmbedUrl(draft.reelUrl, reelPlatform))}
+                />
+                {draft.reelUrl && !reelEmbedUrl(draft.reelUrl, reelPlatform) ? (
+                  <p className="field-error">Enter a valid public {reelPlatform === 'instagram' ? 'Instagram Reel' : reelPlatform === 'tiktok' ? 'TikTok video' : 'Facebook Reel'} link.</p>
+                ) : null}
+              </Field>
+            </div>
           ) : (
             <Field
               label="Video file"
@@ -349,4 +460,56 @@ export default function AdminMovies() {
       </div>
     </div>
   );
+}
+
+function reelEmbedUrl(value: string, platform: ReelPlatform): string | null {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    if (url.protocol !== 'https:') return null;
+
+    if (platform === 'instagram') {
+      if (host !== 'instagram.com') return null;
+      const shortcode = url.pathname.match(/^\/reel\/([a-zA-Z0-9_-]+)\/?$/)?.[1];
+      return shortcode ? `https://www.instagram.com/reel/${shortcode}/embed` : null;
+    }
+
+    if (platform === 'tiktok') {
+      if (!['tiktok.com', 'm.tiktok.com'].includes(host)) return null;
+      const videoId = url.pathname.match(/\/video\/(\d+)/)?.[1];
+      return videoId ? `https://www.tiktok.com/embed/v2/${videoId}` : null;
+    }
+
+    if (!['facebook.com', 'm.facebook.com', 'fb.watch'].includes(host)) return null;
+    const isVideoLink = /\/(?:reel|videos|watch|share\/r)\//.test(url.pathname) || url.searchParams.has('v');
+    if (!isVideoLink) return null;
+    const embed = new URL('https://www.facebook.com/plugins/video.php');
+    embed.searchParams.set('href', url.toString());
+    embed.searchParams.set('show_text', 'false');
+    return embed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function reelSourceFromEmbed(value: string): { platform: ReelPlatform; url: string } | null {
+  try {
+    const embed = new URL(value);
+    const host = embed.hostname.toLowerCase().replace(/^www\./, '');
+    if (host === 'instagram.com') {
+      const shortcode = embed.pathname.match(/^\/reel\/([a-zA-Z0-9_-]+)\/embed$/)?.[1];
+      return shortcode ? { platform: 'instagram', url: `https://www.instagram.com/reel/${shortcode}/` } : null;
+    }
+    if (host === 'tiktok.com') {
+      const videoId = embed.pathname.match(/^\/embed\/v2\/(\d+)/)?.[1];
+      return videoId ? { platform: 'tiktok', url: `https://www.tiktok.com/video/${videoId}` } : null;
+    }
+    if (host === 'facebook.com' && embed.pathname === '/plugins/video.php') {
+      const url = embed.searchParams.get('href');
+      return url && reelEmbedUrl(url, 'facebook') ? { platform: 'facebook', url } : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }

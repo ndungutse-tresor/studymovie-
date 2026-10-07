@@ -231,6 +231,17 @@ export async function getChapter(userId: string, chapterId: string) {
     chapter.position + 1,
   );
 
+  const resources = await query<{
+    id: string;
+    file_name: string;
+    resource_url: string;
+    mime_type: string;
+    size_bytes: number;
+  }>(
+    'SELECT id, file_name, resource_url, mime_type, size_bytes FROM chapter_resources WHERE chapter_id = ? ORDER BY position',
+    chapter.id,
+  );
+
   return {
     id: chapter.id,
     position: chapter.position,
@@ -241,6 +252,13 @@ export async function getChapter(userId: string, chapterId: string) {
     passMark: chapter.pass_mark,
     rewardMinutes: chapter.reward_minutes,
     questionCount,
+    resources: resources.map((resource) => ({
+      id: resource.id,
+      name: resource.file_name,
+      url: resource.resource_url,
+      mimeType: resource.mime_type,
+      sizeBytes: Number(resource.size_bytes),
+    })),
     state: progress.state,
     attempts: progress.attempts,
     bestScore: progress.best_score,

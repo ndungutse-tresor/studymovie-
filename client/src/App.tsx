@@ -24,6 +24,7 @@ import Schedule from './pages/Schedule';
 import Settings from './pages/Settings';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminMovies from './pages/AdminMovies';
+import AdminLearning from './pages/AdminLearning';
 import NotFound from './pages/NotFound';
 
 function FullPageLoader() {
@@ -119,6 +120,7 @@ export default function App() {
           >
             <Route index element={<AdminDashboard />} />
             <Route path="movies" element={<AdminMovies />} />
+            <Route path="learning" element={<AdminLearning />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />

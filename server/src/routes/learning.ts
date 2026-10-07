@@ -1,8 +1,10 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { asyncHandler } from '../middleware/async-handler.js';
 import { requireAuth } from '../middleware/auth.js';
 import { courseIdFromSlug, getChapter, getCourse, listCourses } from '../services/courses.js';
+import { answerLessonQuestion } from '../services/study-assistant.js';
 import {
   beginStudy,
   completeStudy,
@@ -14,6 +16,13 @@ import {
 } from '../services/progression.js';
 
 export const learningRouter = Router();
+
+const assistantLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
 
 learningRouter.get(
   '/courses',
@@ -48,6 +57,32 @@ learningRouter.get(
       chapter: await getChapter(req.user!.id, req.params.chapterId),
       study: await studyStatus(req.user!.id, req.params.chapterId),
     });
+  }),
+);
+
+learningRouter.post(
+  '/chapters/:chapterId/assistant',
+  requireAuth,
+  assistantLimiter,
+  asyncHandler(async (req, res) => {
+    const { message, history } = z
+      .object({
+        message: z.string().trim().min(1).max(1500),
+        history: z.array(z.object({
+          role: z.enum(['user', 'assistant']),
+          content: z.string().trim().min(1).max(1500),
+        })).max(8).default([]),
+      })
+      .parse(req.body);
+    const chapter = await getChapter(req.user!.id, req.params.chapterId);
+    const reply = await answerLessonQuestion({
+      courseTitle: chapter.course.title,
+      lessonTitle: chapter.title,
+      lessonContent: chapter.content,
+      history,
+      message,
+    });
+    res.json({ reply });
   }),
 );
 

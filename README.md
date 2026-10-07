@@ -92,6 +92,23 @@ for current limits.
 
 Open http://localhost:5173, apply, and the flow runs end to end.
 
+### Admin-created learning courses
+
+Administrators can create a course and first lesson from `/admin/learning`.
+PDF, DOC/DOCX, and PPT/PPTX uploads are text-extracted for the lesson and exam
+draft; video resources play inline, and their transcript or lesson notes must be
+provided as text for question drafting. DeepSeek creates a draft multiple-choice
+exam that the administrator reviews and edits before publishing. Published
+courses appear in the learner course catalog and use the same server-enforced
+study timer, exam pass mark, and movie reward as seeded courses.
+
+Set `DEEPSEEK_API_KEY` in the server `.env` to enable question drafting. Create a
+key from the DeepSeek Platform's API keys page; keep it private and never put it
+in browser code. The same key enables the in-lesson study tutor. Lesson text and
+chat messages are sent to DeepSeek for answers; do not upload material you are
+not permitted to share with that service. API usage may require account credits
+and is subject to DeepSeek's current pricing and limits.
+
 To watch the whole cycle quickly, drop the study gate:
 
 ```bash
@@ -110,6 +127,16 @@ npm run typecheck   # strict typecheck, server and client
 
 ## Deployment
 
+### Render
+
+The repository includes `render.yaml` for a single Render web service. Connect
+the GitHub repository in Render and create a Blueprint; provide the prompted
+database and auth secrets in the Render dashboard. The service builds both
+workspaces, applies migrations and seeds the catalog on startup, and serves the
+React app and API from one origin. Use a hosted PostgreSQL URL such as the Neon
+pooled URL already used locally. For persistent file uploads, configure the
+S3-compatible storage variables; production local-disk uploads are disabled.
+
 The repository deploys to Vercel as a single project: the Vite bundle is served
 statically and the Express application runs as a serverless function behind
 `/api/**`, so both halves share one origin and there is no CORS to configure.
@@ -126,6 +153,7 @@ Required environment variables:
 | `JWT_REFRESH_SECRET` | As above, and different from the access secret. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Seeded administrator. Change before going live. |
 | `TMDB_API_KEY` | Optional; enables the TMDB metadata provider. |
+| `DEEPSEEK_API_KEY` | Optional; enables AI-drafted admin exam questions. |
 
 `DATABASE_POOL_MAX` defaults to 1 when `VERCEL` is set, because each serverless
 instance holds its own pool and the database's connection budget is shared.

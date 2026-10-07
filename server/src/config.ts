@@ -48,9 +48,15 @@ const movieUploadDir = process.env.MOVIE_UPLOAD_DIR
   : process.env.VERCEL
     ? path.join('/tmp', 'studyreel-movie-uploads')
     : path.join(dataDir, 'movie-uploads');
+const learningResourceUploadDir = process.env.LEARNING_RESOURCE_UPLOAD_DIR
+  ? path.resolve(process.env.LEARNING_RESOURCE_UPLOAD_DIR)
+  : process.env.VERCEL
+    ? path.join('/tmp', 'studyreel-learning-resources')
+    : path.join(dataDir, 'learning-resources');
 
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 if (!fs.existsSync(movieUploadDir)) fs.mkdirSync(movieUploadDir, { recursive: true });
+if (!fs.existsSync(learningResourceUploadDir)) fs.mkdirSync(learningResourceUploadDir, { recursive: true });
 
 function requiredSecret(name: string, fallbackFile: string): string {
   const fromEnv = process.env[name];
@@ -125,6 +131,14 @@ export const config = {
     /** Cool-down between failed attempts, in seconds. */
     retryCooldownSeconds: int('RETRY_COOLDOWN_SECONDS', 60 * 5),
     maxAttemptsBeforeCooldown: int('MAX_ATTEMPTS_BEFORE_COOLDOWN', 2),
+    deepSeekApiKey: process.env.DEEPSEEK_API_KEY ?? '',
+    deepSeekModel: process.env.DEEPSEEK_MODEL ?? 'deepseek-chat',
+  },
+
+  content: {
+    resourceUploadDir: learningResourceUploadDir,
+    uploadMode: hasCompleteMovieStorageSettings ? 'object' : process.env.NODE_ENV === 'production' ? 'disabled' : 'local',
+    uploadMaxBytes: int('RESOURCE_UPLOAD_MAX_MB', 4096) * 1024 * 1024,
   },
 
   movies: {
@@ -136,7 +150,7 @@ export const config = {
         ? process.env.MOVIE_STORAGE_FORCE_PATH_STYLE === 'true'
         : Boolean(movieStorageSettings.endpoint),
     },
-    uploadMode: hasCompleteMovieStorageSettings ? 'object' : process.env.VERCEL ? 'disabled' : 'local',
+    uploadMode: hasCompleteMovieStorageSettings ? 'object' : process.env.NODE_ENV === 'production' ? 'disabled' : 'local',
     uploadMaxBytes: int('MOVIE_UPLOAD_MAX_MB', 4096) * 1024 * 1024,
     tmdbApiKey: process.env.TMDB_API_KEY ?? '',
     requestTimeoutMs: int('MOVIE_REQUEST_TIMEOUT_MS', 12_000),

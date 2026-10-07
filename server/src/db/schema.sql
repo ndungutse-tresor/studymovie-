@@ -94,6 +94,20 @@ CREATE TABLE IF NOT EXISTS questions (
 );
 CREATE INDEX IF NOT EXISTS idx_questions_chapter ON questions(chapter_id, position);
 
+CREATE TABLE IF NOT EXISTS chapter_resources (
+  id             TEXT PRIMARY KEY,
+  chapter_id     TEXT NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+  position       INTEGER NOT NULL DEFAULT 0,
+  file_name      TEXT NOT NULL,
+  resource_url   TEXT NOT NULL,
+  mime_type      TEXT NOT NULL,
+  size_bytes     BIGINT NOT NULL DEFAULT 0,
+  extracted_text TEXT NOT NULL DEFAULT '',
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (chapter_id, position)
+);
+CREATE INDEX IF NOT EXISTS idx_chapter_resources_chapter ON chapter_resources(chapter_id, position);
+
 -- ---------------------------------------------------------------------------
 -- Progression
 -- ---------------------------------------------------------------------------

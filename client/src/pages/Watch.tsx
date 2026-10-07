@@ -236,20 +236,9 @@ function Player({ movie, session }: { movie: Movie | null; session: RewardSessio
         <div>
           <p className="text-lg font-semibold text-white">{title}</p>
           <p className="mt-2 text-sm leading-6 text-white/70">
-            No playable stream could be resolved for this title from here. Your session clock is still running, and
-            the next chapter unlocks when it ends.
+            This video cannot be embedded here. Ask an administrator to use a public video that allows playback
+            inside StudyReel. Your session clock is still running, and the next chapter unlocks when it ends.
           </p>
-          {movie?.sourceUrl ? (
-            <a
-              href={movie.sourceUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="mt-5 inline-flex h-9 items-center gap-2 rounded-lg bg-white px-4 text-sm font-semibold text-ink-950 transition hover:bg-slate-200"
-            >
-              Open at the source
-              <Icon name="external" size={14} />
-            </a>
-          ) : null}
         </div>
       </div>
     </div>

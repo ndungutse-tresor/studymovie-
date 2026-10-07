@@ -58,7 +58,7 @@ export default function Catalog() {
       <PageHeader
         eyebrow="Curriculum"
         title="Courses"
-        description="Eight IT courses across beginner, intermediate, and advanced levels. Each chapter ends in an exam, and each pass earns viewing time."
+        description="Explore IT courses across beginner, intermediate, and advanced levels. Pass a chapter exam to earn viewing time."
       />
 
       <div className="mb-8 flex flex-col gap-3 lg:flex-row lg:items-center">

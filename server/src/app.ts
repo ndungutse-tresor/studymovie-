@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
+import path from 'node:path';
 
 import { config } from './config.js';
 import { one, pool } from './db/index.js';
@@ -11,6 +12,7 @@ import { errorHandler, notFoundHandler } from './middleware/error.js';
 import { authRouter } from './routes/auth.js';
 import { applicationsRouter } from './routes/applications.js';
 import { learningRouter } from './routes/learning.js';
+import { learningContentRouter } from './routes/learning-content.js';
 import { rewardsRouter } from './routes/rewards.js';
 import { moviesRouter } from './routes/movies.js';
 import { scheduleRouter } from './routes/schedule.js';
@@ -64,6 +66,12 @@ export function createApp() {
   );
 
   app.use('/api/movies/uploads', express.static(config.movies.uploadDir, {
+    dotfiles: 'deny',
+    index: false,
+    immutable: true,
+    maxAge: '1h',
+  }));
+  app.use('/api/content/uploads', express.static(config.content.resourceUploadDir, {
     dotfiles: 'deny',
     index: false,
     immutable: true,
@@ -128,11 +136,22 @@ export function createApp() {
   app.use('/api/auth', authRouter);
   app.use('/api/applications', applicationsRouter);
   app.use('/api/learning', learningRouter);
+  app.use('/api/learning-content', learningContentRouter);
   app.use('/api/rewards', rewardsRouter);
   app.use('/api/movies', moviesRouter);
   app.use('/api/schedule', scheduleRouter);
   app.use('/api/dashboard', dashboardRouter);
   app.use('/api/cron', cronRouter);
+
+  if (config.isProduction) {
+    const clientDirectory = path.resolve(process.cwd(), 'client', 'dist');
+    app.use(express.static(clientDirectory, { index: false, maxAge: '1h' }));
+    app.get(/^\/(?!api(?:\/|$)).*/, (_req, res, next) => {
+      res.sendFile(path.join(clientDirectory, 'index.html'), (error) => {
+        if (error) next(error);
+      });
+    });
+  }
 
   app.use(notFoundHandler);
   app.use(errorHandler);

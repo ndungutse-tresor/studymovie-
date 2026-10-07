@@ -72,11 +72,20 @@ export interface ChapterDetail {
   passMark: number;
   rewardMinutes: number;
   questionCount: number;
+  resources: ChapterResource[];
   state: ProgressState;
   attempts: number;
   bestScore: number;
   course: { id: string; slug: string; title: string; level: Level };
   nextChapter: { id: string; title: string } | null;
+}
+
+export interface ChapterResource {
+  id: string;
+  name: string;
+  url: string;
+  mimeType: string;
+  sizeBytes: number;
 }
 
 export interface StudyStatus {

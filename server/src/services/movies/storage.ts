@@ -14,6 +14,15 @@ const VIDEO_TYPES: Record<string, string> = {
   '.mkv': 'video/x-matroska',
 };
 
+const RESOURCE_TYPES: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  ...VIDEO_TYPES,
+};
+
 const client = config.movies.storage.enabled
   ? new S3Client({
       region: config.movies.storage.region,
@@ -28,6 +37,43 @@ const client = config.movies.storage.enabled
 
 export function movieContentType(fileName: string): string | null {
   return VIDEO_TYPES[path.extname(fileName).toLowerCase()] ?? null;
+}
+
+export function resourceContentType(fileName: string): string | null {
+  return RESOURCE_TYPES[path.extname(fileName).toLowerCase()] ?? null;
+}
+
+export async function createLearningResourceUploadTicket(fileName: string, size: number) {
+  if (!client || !config.movies.storage.enabled) {
+    throw new HttpError(503, 'UPLOAD_STORAGE_UNAVAILABLE', 'Cloud resource storage is not configured.');
+  }
+  if (size < 1 || size > config.content.uploadMaxBytes) {
+    throw HttpError.badRequest(`Choose a resource smaller than ${config.content.uploadMaxBytes / 1024 / 1024} MB.`);
+  }
+
+  const contentType = resourceContentType(fileName);
+  if (!contentType) throw HttpError.badRequest('Choose a PDF, Word, PowerPoint, or video resource.');
+
+  const extension = path.extname(fileName).toLowerCase();
+  const key = `resources/${randomUUID()}${extension}`;
+  const uploadUrl = await getSignedUrl(
+    client,
+    new PutObjectCommand({
+      Bucket: config.movies.storage.bucket,
+      Key: key,
+      ContentType: contentType,
+      CacheControl: 'public, max-age=3600',
+    }),
+    { expiresIn: 900 },
+  );
+
+  return {
+    uploadUrl,
+    resourceUrl: `${config.movies.storage.publicUrl}/${key}`,
+    contentType,
+    headers: { 'Content-Type': contentType },
+    expiresInSeconds: 900,
+  };
 }
 
 export async function createMovieUploadTicket(fileName: string, size: number) {
