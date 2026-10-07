@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { config } from './config.js';
 import { one, pool } from './db/index.js';
@@ -144,8 +145,9 @@ export function createApp() {
   app.use('/api/cron', cronRouter);
 
   if (config.isProduction) {
-    const clientDirectory = path.resolve(process.cwd(), 'client', 'dist');
+    const clientDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../client/dist');
     app.use(express.static(clientDirectory, { index: false, maxAge: '1h' }));
+    app.get('/favicon.ico', (_req, res) => res.status(204).end());
     app.get(/^\/(?!api(?:\/|$)).*/, (_req, res, next) => {
       res.sendFile(path.join(clientDirectory, 'index.html'), (error) => {
         if (error) next(error);
