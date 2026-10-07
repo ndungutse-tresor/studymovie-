@@ -63,6 +63,13 @@ export function createApp() {
     }),
   );
 
+  app.use('/api/movies/uploads', express.static(config.movies.uploadDir, {
+    dotfiles: 'deny',
+    index: false,
+    immutable: true,
+    maxAge: '1h',
+  }));
+
   /**
    * Attaches the caller when a valid token is present, without requiring one.
    * Public routes such as the catalogue use this to fold in personal progress.

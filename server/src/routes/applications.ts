@@ -17,6 +17,15 @@ import {
 
 export const applicationsRouter = Router();
 
+function adminApplication(record: Parameters<typeof publicApplication>[0]) {
+  return {
+    ...publicApplication(record),
+    phone: record.phone,
+    country: record.country,
+    motivation: record.motivation,
+  };
+}
+
 const applyLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 10,
@@ -115,7 +124,7 @@ applicationsRouter.get(
           'SELECT * FROM applications ORDER BY created_at DESC LIMIT 200',
         );
 
-    res.json({ applications: rows.map(publicApplication) });
+    res.json({ applications: rows.map(adminApplication) });
   }),
 );
 
@@ -132,6 +141,6 @@ applicationsRouter.post(
       .parse(req.body);
 
     const record = await decideApplication(req.params.id, decision, note);
-    res.json({ application: publicApplication(record) });
+    res.json({ application: adminApplication(record) });
   }),
 );

@@ -139,7 +139,7 @@ export type MovieDecision = 'WATCH_LATER' | 'DECLINED' | 'WATCHED';
 
 export interface Movie {
   id: string;
-  source: 'archive' | 'youtube' | 'tmdb' | 'catalog';
+  source: 'archive' | 'youtube' | 'tmdb' | 'catalog' | 'manual';
   title: string;
   year: number | null;
   synopsis: string;

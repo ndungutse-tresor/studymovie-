@@ -2,10 +2,22 @@ import { parseSqlDate, query, run } from '../../db/index.js';
 import { id as newId } from '../../lib/ids.js';
 import { HttpError } from '../../lib/http-error.js';
 import { catalogMovies } from './catalog.js';
-import { ensureLibrary, findInLibrary, libraryGenres, listLibrary, recentLibrary, sourceStates } from './library.js';
+import {
+  createManagedMovie,
+  deleteManagedMovie,
+  ensureLibrary,
+  findInLibrary,
+  libraryGenres,
+  listLibrary,
+  listManagedMovies,
+  recentLibrary,
+  sourceStates,
+  updateManagedMovie,
+} from './library.js';
 import type { Movie, MovieQuery } from './types.js';
 
 export type { Movie, MovieQuery, MovieSource } from './types.js';
+export { createManagedMovie, deleteManagedMovie, listManagedMovies, updateManagedMovie };
 export { syncMovies, syncOnce, type SyncSummary } from './library.js';
 
 export type Decision = 'WATCH_LATER' | 'DECLINED' | 'WATCHED';

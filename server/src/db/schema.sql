@@ -215,9 +215,8 @@ CREATE TABLE IF NOT EXISTS movie_cache (
 );
 
 -- ---------------------------------------------------------------------------
--- The film library: every title imported from the free sources, refreshed by
--- the scheduled sync. Browsing reads from here, so a page view never waits on
--- an upstream provider.
+-- The film library: provider imports and admin-managed titles. Browsing reads
+-- from here, so a page view never waits on an upstream provider.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS movie_library (
   id              TEXT PRIMARY KEY,

@@ -1,15 +1,19 @@
 import { config } from '../../config.js';
+import { unlink } from 'node:fs/promises';
+import path from 'node:path';
 import { one, parseSqlDate, query, run } from '../../db/index.js';
 import { fetchArchiveNewUploads, fetchArchivePopular } from './archive.js';
 import { fetchYoutubeMovies, youtubeEnabled } from './youtube.js';
 import { fetchTmdbMovies, tmdbEnabled } from './tmdb.js';
 import { catalogMovies } from './catalog.js';
-import type { Movie, MovieQuery, MovieSource } from './types.js';
+import type { ManagedMovieInput, Movie, MovieQuery, MovieSource } from './types.js';
+import { id } from '../../lib/ids.js';
+import { deleteMovieObject } from './storage.js';
 
 /**
  * The film library.
  *
- * A scheduled sync pulls every free source into `movie_library`; browsing reads
+ * Provider syncs and admin-managed entries share `movie_library`; browsing reads
  * only from that table. Page views therefore never wait on an upstream
  * provider, and a film a source publishes appears on the next sync without any
  * change here.
@@ -380,6 +384,75 @@ export async function libraryGenres(): Promise<string[]> {
 export async function findInLibrary(movieId: string): Promise<Movie | null> {
   const row = await one<LibraryRow>('SELECT * FROM movie_library WHERE id = ?', movieId);
   return row ? fromRow(row) : null;
+}
+
+export async function listManagedMovies(): Promise<Movie[]> {
+  const rows = await query<LibraryRow>(
+    "SELECT * FROM movie_library WHERE source = 'manual' ORDER BY title ASC",
+  );
+  return rows.map(fromRow);
+}
+
+async function removeUploadedMovie(streamUrl: string | null): Promise<void> {
+  const match = streamUrl?.match(/^\/api\/movies\/uploads\/([a-f0-9-]{36}\.(?:mp4|webm|ogg|mov|m4v|mkv))$/i);
+  if (match) await unlink(path.join(config.movies.uploadDir, match[1])).catch(() => undefined);
+  if (streamUrl && !match) await deleteMovieObject(streamUrl).catch((error: unknown) => {
+    console.error('Could not delete stored movie object:', error);
+  });
+}
+
+export async function createManagedMovie(input: ManagedMovieInput): Promise<Movie> {
+  const movieId = id('movie');
+  await run(
+    `INSERT INTO movie_library
+      (id, source, title, year, synopsis, genres, runtime_minutes, poster_url, source_url,
+       stream_url, embed_url, popularity, licence, added_at)
+     VALUES (?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, now())`,
+    movieId,
+    input.title,
+    input.year,
+    input.synopsis,
+    input.genres,
+    input.runtimeMinutes,
+    input.posterUrl,
+    input.sourceUrl,
+    input.streamUrl,
+    input.embedUrl,
+    input.licence,
+  );
+  return (await findInLibrary(movieId))!;
+}
+
+export async function updateManagedMovie(movieId: string, input: ManagedMovieInput): Promise<Movie | null> {
+  const previous = await findInLibrary(movieId);
+  if (!previous || previous.source !== 'manual') return null;
+  const changed = await run(
+    `UPDATE movie_library SET
+       title = ?, year = ?, synopsis = ?, genres = ?, runtime_minutes = ?, poster_url = ?,
+       source_url = ?, stream_url = ?, embed_url = ?, licence = ?
+     WHERE id = ? AND source = 'manual'`,
+    input.title,
+    input.year,
+    input.synopsis,
+    input.genres,
+    input.runtimeMinutes,
+    input.posterUrl,
+    input.sourceUrl,
+    input.streamUrl,
+    input.embedUrl,
+    input.licence,
+    movieId,
+  );
+  if (changed && previous.streamUrl !== input.streamUrl) await removeUploadedMovie(previous.streamUrl);
+  return changed ? findInLibrary(movieId) : null;
+}
+
+export async function deleteManagedMovie(movieId: string): Promise<boolean> {
+  const movie = await findInLibrary(movieId);
+  if (!movie || movie.source !== 'manual') return false;
+  const deleted = (await run("DELETE FROM movie_library WHERE id = ? AND source = 'manual'", movieId)) > 0;
+  if (deleted) await removeUploadedMovie(movie.streamUrl);
+  return deleted;
 }
 
 export interface SourceState {

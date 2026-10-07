@@ -1,12 +1,56 @@
-import 'dotenv/config';
+import { config as loadEnv } from 'dotenv';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+
+const envFile =
+  process.env.DOTENV_CONFIG_PATH ??
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.env');
+loadEnv({ path: envFile });
 
 const rootDir = path.resolve(process.cwd());
 const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(rootDir, 'data');
+const movieStorageSettings = {
+  bucket: process.env.MOVIE_STORAGE_BUCKET ?? '',
+  region: process.env.MOVIE_STORAGE_REGION || 'us-east-1',
+  endpoint: process.env.MOVIE_STORAGE_ENDPOINT ?? '',
+  accessKeyId: process.env.MOVIE_STORAGE_ACCESS_KEY_ID ?? '',
+  secretAccessKey: process.env.MOVIE_STORAGE_SECRET_ACCESS_KEY ?? '',
+  publicUrl: process.env.MOVIE_STORAGE_PUBLIC_URL?.replace(/\/+$/, '') ?? '',
+  forcePathStyle: process.env.MOVIE_STORAGE_FORCE_PATH_STYLE === 'true',
+};
+const hasMovieStorageSettings = Boolean(
+  movieStorageSettings.bucket ||
+    movieStorageSettings.endpoint ||
+    movieStorageSettings.accessKeyId ||
+    movieStorageSettings.secretAccessKey ||
+    movieStorageSettings.publicUrl ||
+    process.env.MOVIE_STORAGE_FORCE_PATH_STYLE,
+);
+const hasCompleteMovieStorageSettings = Boolean(
+  movieStorageSettings.bucket &&
+    movieStorageSettings.region &&
+    movieStorageSettings.accessKeyId &&
+    movieStorageSettings.secretAccessKey &&
+    movieStorageSettings.publicUrl,
+);
+
+if (hasMovieStorageSettings && !hasCompleteMovieStorageSettings) {
+  throw new Error(
+    'Movie object storage requires MOVIE_STORAGE_BUCKET, MOVIE_STORAGE_REGION, ' +
+      'MOVIE_STORAGE_ACCESS_KEY_ID, MOVIE_STORAGE_SECRET_ACCESS_KEY, and MOVIE_STORAGE_PUBLIC_URL.',
+  );
+}
+
+const movieUploadDir = process.env.MOVIE_UPLOAD_DIR
+  ? path.resolve(process.env.MOVIE_UPLOAD_DIR)
+  : process.env.VERCEL
+    ? path.join('/tmp', 'studyreel-movie-uploads')
+    : path.join(dataDir, 'movie-uploads');
 
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+if (!fs.existsSync(movieUploadDir)) fs.mkdirSync(movieUploadDir, { recursive: true });
 
 function requiredSecret(name: string, fallbackFile: string): string {
   const fromEnv = process.env[name];
@@ -84,6 +128,16 @@ export const config = {
   },
 
   movies: {
+    uploadDir: movieUploadDir,
+    storage: {
+      ...movieStorageSettings,
+      enabled: hasCompleteMovieStorageSettings,
+      forcePathStyle: process.env.MOVIE_STORAGE_FORCE_PATH_STYLE
+        ? process.env.MOVIE_STORAGE_FORCE_PATH_STYLE === 'true'
+        : Boolean(movieStorageSettings.endpoint),
+    },
+    uploadMode: hasCompleteMovieStorageSettings ? 'object' : process.env.VERCEL ? 'disabled' : 'local',
+    uploadMaxBytes: int('MOVIE_UPLOAD_MAX_MB', 4096) * 1024 * 1024,
     tmdbApiKey: process.env.TMDB_API_KEY ?? '',
     requestTimeoutMs: int('MOVIE_REQUEST_TIMEOUT_MS', 12_000),
     /**

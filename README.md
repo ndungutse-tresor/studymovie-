@@ -78,10 +78,17 @@ response rather than thrown, and the UI shows each source's live status.
 
 ```bash
 npm install
-cp .env.example .env      # set DATABASE_URL to your Postgres instance
+cp .env.example .env      # replace DATABASE_URL with your PostgreSQL connection string
 npm run db:setup          # apply the schema, then seed the catalog
 npm run dev               # API on :4000, client on :5173
 ```
+
+For a free hosted database, Neon Free currently includes up to 100 projects per
+organization. Create a Neon project, copy its pooled connection string into
+`DATABASE_URL`, and keep `DATABASE_SSL=true`. Free-tier limits include 1 GB of
+PostgreSQL storage per project (20 GB total per account) and 100 compute
+hours per project each month; see [Neon's plans](https://neon.com/docs/introduction/plans)
+for current limits.
 
 Open http://localhost:5173, apply, and the flow runs end to end.
 
@@ -122,6 +129,32 @@ Required environment variables:
 
 `DATABASE_POOL_MAX` defaults to 1 when `VERCEL` is set, because each serverless
 instance holds its own pool and the database's connection budget is shared.
+
+### Movie video uploads
+
+Local development stores uploaded videos under `data/movie-uploads`. Vercel's
+filesystem is temporary, so production uploads use an S3-compatible object
+storage bucket and short-lived signed upload URLs. Cloudflare R2 works with the
+same configuration as AWS S3; configure these variables in `.env` locally or
+in the Vercel project settings:
+
+| Variable | Purpose |
+|---|---|
+| `MOVIE_STORAGE_BUCKET` | Bucket name |
+| `MOVIE_STORAGE_REGION` | `auto` for R2; AWS region for S3 |
+| `MOVIE_STORAGE_ENDPOINT` | R2 account endpoint; leave empty for AWS S3 |
+| `MOVIE_STORAGE_ACCESS_KEY_ID` | Bucket access key ID |
+| `MOVIE_STORAGE_SECRET_ACCESS_KEY` | Bucket secret access key |
+| `MOVIE_STORAGE_PUBLIC_URL` | Public bucket domain used for playback |
+| `MOVIE_STORAGE_FORCE_PATH_STYLE` | Optional S3 endpoint path-style override |
+| `MOVIE_UPLOAD_MAX_MB` | Maximum upload size; defaults to 4096 MB |
+
+The bucket must allow public reads for the configured playback domain. Configure
+bucket CORS to allow `PUT` requests from the app's origins with the `Content-Type`
+header. For R2, create a public custom domain and an API token limited to this
+bucket. Never commit access keys. When all required storage variables are set,
+admin uploads go directly from the browser to the bucket; local disk remains the
+development fallback when cloud storage is not configured.
 
 A seeded administrator account is created on first run from `ADMIN_EMAIL` /
 `ADMIN_PASSWORD`. **Change the password before deploying anywhere real.**

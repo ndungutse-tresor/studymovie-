@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
+import { MulterError } from 'multer';
 import { HttpError } from '../lib/http-error.js';
 import { config } from '../config.js';
 
@@ -30,6 +31,19 @@ export function errorHandler(
   if (error instanceof HttpError) {
     res.status(error.status).json({
       error: { code: error.code, message: error.message, details: error.details },
+    });
+    return;
+  }
+
+  if (error instanceof MulterError) {
+    const tooLarge = error.code === 'LIMIT_FILE_SIZE';
+    res.status(tooLarge ? 413 : 400).json({
+      error: {
+        code: tooLarge ? 'UPLOAD_TOO_LARGE' : 'UPLOAD_INVALID',
+        message: tooLarge
+          ? `Video exceeds the ${config.movies.uploadMaxBytes / 1024 / 1024} MB upload limit.`
+          : 'The video upload could not be processed.',
+      },
     });
     return;
   }

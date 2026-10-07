@@ -1,4 +1,18 @@
-export type MovieSource = 'archive' | 'youtube' | 'tmdb' | 'catalog';
+export type MovieSource = 'archive' | 'youtube' | 'tmdb' | 'catalog' | 'manual';
+
+export type ManagedMovieInput = Pick<
+  Movie,
+  | 'title'
+  | 'year'
+  | 'synopsis'
+  | 'genres'
+  | 'runtimeMinutes'
+  | 'posterUrl'
+  | 'sourceUrl'
+  | 'streamUrl'
+  | 'embedUrl'
+  | 'licence'
+>;
 
 export interface Movie {
   /** Stable, source-prefixed identifier, e.g. `archive:night_of_the_living_dead`. */

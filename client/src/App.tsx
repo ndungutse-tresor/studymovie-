@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AlertProvider } from './context/AlertContext';
 import { AppLayout } from './components/AppLayout';
+import { AdminLayout } from './components/AdminLayout';
 import { PublicLayout } from './components/PublicLayout';
 import { Spinner } from './components/ui';
 
@@ -21,6 +22,8 @@ import Movies from './pages/Movies';
 import Watchlist from './pages/Watchlist';
 import Schedule from './pages/Schedule';
 import Settings from './pages/Settings';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminMovies from './pages/AdminMovies';
 import NotFound from './pages/NotFound';
 
 function FullPageLoader() {
@@ -31,19 +34,30 @@ function FullPageLoader() {
   );
 }
 
-function RequireAuth({ children }: { children: React.ReactNode }) {
+function homeForRole(role: 'LEARNER' | 'ADMIN') {
+  return role === 'ADMIN' ? '/admin' : '/app';
+}
+
+function RequireRole({
+  role,
+  children,
+}: {
+  role: 'LEARNER' | 'ADMIN';
+  children: React.ReactNode;
+}) {
   const { user, ready } = useAuth();
   const location = useLocation();
 
   if (!ready) return <FullPageLoader />;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (user.role !== role) return <Navigate to={homeForRole(user.role)} replace />;
   return <>{children}</>;
 }
 
 function RedirectIfAuthed({ children }: { children: React.ReactNode }) {
   const { user, ready } = useAuth();
   if (!ready) return <FullPageLoader />;
-  if (user) return <Navigate to="/app" replace />;
+  if (user) return <Navigate to={homeForRole(user.role)} replace />;
   return <>{children}</>;
 }
 
@@ -78,9 +92,9 @@ export default function App() {
           <Route
             path="/app"
             element={
-              <RequireAuth>
+              <RequireRole role="LEARNER">
                 <AppLayout />
-              </RequireAuth>
+              </RequireRole>
             }
           >
             <Route index element={<Dashboard />} />
@@ -93,6 +107,18 @@ export default function App() {
             <Route path="watchlist" element={<Watchlist />} />
             <Route path="schedule" element={<Schedule />} />
             <Route path="settings" element={<Settings />} />
+          </Route>
+
+          <Route
+            path="/admin"
+            element={
+              <RequireRole role="ADMIN">
+                <AdminLayout />
+              </RequireRole>
+            }
+          >
+            <Route index element={<AdminDashboard />} />
+            <Route path="movies" element={<AdminMovies />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />

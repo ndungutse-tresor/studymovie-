@@ -15,15 +15,15 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const destination = (location.state as { from?: string } | null)?.from ?? '/app';
+  const destination = (location.state as { from?: string } | null)?.from;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
-      await login(email.trim(), password);
-      navigate(destination, { replace: true });
+      const user = await login(email.trim(), password);
+      navigate(destination ?? (user.role === 'ADMIN' ? '/admin' : '/app'), { replace: true });
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'Sign in failed. Try again.');
     } finally {

@@ -112,9 +112,37 @@ async function send<T>(method: Method, path: string, body?: unknown, retry = tru
   return payload as T;
 }
 
+async function sendUpload<T>(path: string, file: File, retry = true): Promise<T> {
+  const form = new FormData();
+  form.append('video', file);
+  const accessToken = tokenStore.access();
+  const response = await fetch(`/api${path}`, {
+    method: 'POST',
+    headers: accessToken ? { authorization: `Bearer ${accessToken}` } : {},
+    body: form,
+  });
+
+  if (response.status === 401 && retry && tokenStore.refresh()) {
+    const refreshed = await refreshTokens();
+    if (refreshed) return sendUpload<T>(path, file, false);
+    tokenStore.clear();
+    for (const listener of sessionExpiredListeners) listener();
+  }
+
+  const payload = (await response.json().catch(() => ({}))) as { error?: ApiErrorShape } & Record<string, unknown>;
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      payload.error ?? { code: 'UNKNOWN', message: 'The video could not be uploaded.' },
+    );
+  }
+  return payload as T;
+}
+
 export const api = {
   get: <T>(path: string) => send<T>('GET', path),
   post: <T>(path: string, body?: unknown) => send<T>('POST', path, body ?? {}),
   patch: <T>(path: string, body?: unknown) => send<T>('PATCH', path, body ?? {}),
   delete: <T>(path: string) => send<T>('DELETE', path),
+  upload: <T>(path: string, file: File) => sendUpload<T>(path, file),
 };
