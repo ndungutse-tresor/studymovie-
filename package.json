@@ -15,6 +15,7 @@
     "start": "npm --workspace server run start",
     "render-start": "npm run migrate && npm run seed && npm run start",
     "seed": "npm --workspace server run seed",
+    "admin:reset-password": "npm --workspace server run reset-admin-password",
     "typecheck": "npm --workspace server run typecheck && npm --workspace client run typecheck",
     "lint": "npm run typecheck",
     "vercel-build": "npm --workspace server run build && npm --workspace server run migrate && npm --workspace server run seed && npm --workspace server run sync-movies && npm --workspace client run build",

@@ -78,7 +78,7 @@ response rather than thrown, and the UI shows each source's live status.
 
 ```bash
 npm install
-cp .env.example .env      # replace DATABASE_URL with your PostgreSQL connection string
+cp .env.example .env      # set DATABASE_URL and unique ADMIN_EMAIL / ADMIN_PASSWORD
 npm run db:setup          # apply the schema, then seed the catalog
 npm run dev               # API on :4000, client on :5173
 ```
@@ -122,6 +122,7 @@ npm run build       # typecheck + build both workspaces
 npm run start       # run the built API
 npm run migrate     # apply the schema (idempotent)
 npm run seed        # re-seed the catalog (idempotent)
+npm run admin:reset-password # securely reset an existing admin through the configured database
 npm run typecheck   # strict typecheck, server and client
 ```
 
@@ -151,7 +152,7 @@ Required environment variables:
 | `DATABASE_URL` | Postgres connection string. Use a **pooled** endpoint on serverless. |
 | `JWT_ACCESS_SECRET` | 32+ random bytes, hex. Required in production. |
 | `JWT_REFRESH_SECRET` | As above, and different from the access secret. |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Seeded administrator. Change before going live. |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Required valid admin email and strong password. The account is created by the first seed. |
 | `TMDB_API_KEY` | Optional; enables the TMDB metadata provider. |
 | `DEEPSEEK_API_KEY` | Optional; enables AI-drafted admin exam questions. |
 
@@ -184,8 +185,21 @@ bucket. Never commit access keys. When all required storage variables are set,
 admin uploads go directly from the browser to the bucket; local disk remains the
 development fallback when cloud storage is not configured.
 
-A seeded administrator account is created on first run from `ADMIN_EMAIL` /
-`ADMIN_PASSWORD`. **Change the password before deploying anywhere real.**
+A seeded administrator account is created from `ADMIN_EMAIL` / `ADMIN_PASSWORD`
+when its email is not already in the database. Set both values in the hosting
+provider before the first deployment; there is no built-in production admin
+account. Changing `ADMIN_PASSWORD` later does not update the stored password
+hash. To apply changed credentials to an existing account, update the hosting
+environment variables and run `npm run admin:reset-password` in the Render
+Shell. The command uses `ADMIN_EMAIL` / `ADMIN_PASSWORD` by default and updates
+the existing account to the configured email. If its current email differs,
+provide that existing address as `ADMIN_RESET_EMAIL`.
+
+For Vercel or another host without a shell, run the same command locally with
+`DATABASE_URL` pointed at the hosted database and `ADMIN_EMAIL` /
+`ADMIN_PASSWORD` set to the desired credentials. Verify the database URL is the
+production one before running it. `ADMIN_RESET_EMAIL` and
+`ADMIN_RESET_PASSWORD` can override the target and password for that one run.
 
 ---
 

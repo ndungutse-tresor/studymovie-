@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { passwordIssues } from './lib/password-policy.js';
 
 const envFile =
   process.env.DOTENV_CONFIG_PATH ??
@@ -95,6 +96,23 @@ function int(name: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function adminCredentials(): { email: string; password: string } {
+  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase() ?? '';
+  const password = process.env.ADMIN_PASSWORD ?? '';
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('ADMIN_EMAIL must be set to a valid email address.');
+  }
+
+  const issues = passwordIssues(password);
+  if (issues.length > 0) {
+    throw new Error(`ADMIN_PASSWORD must contain ${issues.join(', ')}.`);
+  }
+
+  return { email, password };
+}
+
+const configuredAdmin = adminCredentials();
+
 export const config = {
   env: process.env.NODE_ENV ?? 'development',
   isProduction: process.env.NODE_ENV === 'production',
@@ -173,10 +191,7 @@ export const config = {
   /** Shared secret Vercel Cron sends as a bearer token to scheduled endpoints. */
   cronSecret: process.env.CRON_SECRET ?? '',
 
-  admin: {
-    email: process.env.ADMIN_EMAIL ?? 'admin@studyreel.io',
-    password: process.env.ADMIN_PASSWORD ?? 'ChangeMe!2024',
-  },
+  admin: configuredAdmin,
 } as const;
 
 export type AppConfig = typeof config;

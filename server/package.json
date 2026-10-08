@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "seed": "tsx src/db/seed.ts",
+    "reset-admin-password": "tsx src/db/reset-admin-password.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "migrate": "tsx src/db/migrate.ts",
     "sync-movies": "tsx src/db/sync-movies.ts"
