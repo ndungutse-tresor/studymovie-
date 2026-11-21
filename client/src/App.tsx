@@ -19,6 +19,8 @@ import Study from './pages/Study';
 import Exam from './pages/Exam';
 import Watch from './pages/Watch';
 import Movies from './pages/Movies';
+import MoviesGallery from './pages/MoviesGallery';
+import FilmPage from './pages/FilmPage';
 import Watchlist from './pages/Watchlist';
 import Schedule from './pages/Schedule';
 import Settings from './pages/Settings';
@@ -90,6 +92,24 @@ export default function App() {
             />
           </Route>
 
+          {/* The movie gallery and film pages are full-screen and carry their own light header. */}
+          <Route
+            path="/app/movies"
+            element={
+              <RequireRole role="LEARNER">
+                <MoviesGallery />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/app/movies/:movieId"
+            element={
+              <RequireRole role="LEARNER">
+                <FilmPage />
+              </RequireRole>
+            }
+          />
+
           <Route
             path="/app"
             element={
@@ -104,7 +124,7 @@ export default function App() {
             <Route path="study/:chapterId" element={<Study />} />
             <Route path="exam/:chapterId" element={<Exam />} />
             <Route path="watch/:sessionId" element={<Watch />} />
-            <Route path="movies" element={<Movies />} />
+            <Route path="movies/list" element={<Movies />} />
             <Route path="watchlist" element={<Watchlist />} />
             <Route path="schedule" element={<Schedule />} />
             <Route path="settings" element={<Settings />} />

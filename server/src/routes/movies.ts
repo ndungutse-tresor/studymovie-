@@ -207,13 +207,15 @@ moviesRouter.delete(
   }),
 );
 
-/** One title, for the player. */
+/** One title, for the player and the film page. */
 moviesRouter.get(
   '/:movieId',
   asyncHandler(async (req, res) => {
     const movie = await findMovie(req.params.movieId);
     if (!movie) throw HttpError.notFound('That title is no longer available.');
-    res.json({ movie });
+    // The film page shows whether the learner saved or declined it.
+    const decisions = await decisionMap(req.user!.id);
+    res.json({ movie: { ...movie, decision: decisions.get(movie.id) ?? null } });
   }),
 );
 

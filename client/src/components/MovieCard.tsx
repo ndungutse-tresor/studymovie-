@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import type { Movie, MovieDecision } from '../lib/types';
 import { Icon } from './Icon';
 import { Poster } from './Poster';
@@ -6,6 +7,8 @@ interface MovieCardProps {
   movie: Movie;
   rank?: number;
   busy?: boolean;
+  /** Opens the film page when the poster or title is clicked. */
+  href?: string;
   /** Present when the learner currently holds unstarted viewing time. */
   onPlay?: (movie: Movie) => void;
   onSave?: (movie: Movie) => void;
@@ -31,11 +34,11 @@ function isRecent(addedAt: string | null | undefined): boolean {
 const ICON_BUTTON =
   'inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] text-xs font-medium text-slate-300 transition hover:border-white/20 hover:bg-white/[0.07] hover:text-white disabled:opacity-60';
 
-export function MovieCard({ movie, rank, busy, onPlay, onSave, onDecline, onUndo }: MovieCardProps) {
+export function MovieCard({ movie, rank, busy, href, onPlay, onSave, onDecline, onUndo }: MovieCardProps) {
   const saved = movie.decision === 'WATCH_LATER';
 
   return (
-    <article className="group flex flex-col">
+    <article className="group relative flex flex-col">
       <div className="relative aspect-[2/3] overflow-hidden rounded-lg shadow-lift ring-1 ring-white/10 transition duration-300 group-hover:ring-white/25">
         <Poster
           title={movie.title}
@@ -86,7 +89,13 @@ export function MovieCard({ movie, rank, busy, onPlay, onSave, onDecline, onUndo
 
       <div className="mt-3 min-w-0">
         <h3 className="truncate text-sm font-semibold text-white" title={movie.title}>
-          {movie.title}
+          {href ? (
+            <Link to={href} className="after:absolute after:inset-x-0 after:top-0 after:aspect-[2/3] hover:underline">
+              {movie.title}
+            </Link>
+          ) : (
+            movie.title
+          )}
         </h3>
         <p className="mt-0.5 truncate text-xs text-slate-500">
           {[movie.year, movie.runtimeMinutes ? `${movie.runtimeMinutes} min` : null, movie.genres[0]]

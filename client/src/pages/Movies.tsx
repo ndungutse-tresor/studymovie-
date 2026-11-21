@@ -18,6 +18,8 @@ interface MoviesPayload {
 
 const RAIL_SIZE = 10;
 
+const filmHref = (movie: Movie) => `/app/movies/${encodeURIComponent(movie.id)}`;
+
 export default function Movies() {
   const navigate = useNavigate();
 
@@ -110,9 +112,14 @@ export default function Movies() {
         title="Movies"
         description="Public-domain and freely redistributable films. Save what you want for later, or decline it and it stops appearing here."
         actions={
-          <LinkButton to="/app/watchlist" variant="secondary" icon="bookmark">
-            Watch later
-          </LinkButton>
+          <div className="flex flex-wrap gap-2">
+            <LinkButton to="/app/movies" variant="secondary" icon="film">
+              Gallery view
+            </LinkButton>
+            <LinkButton to="/app/watchlist" variant="secondary" icon="bookmark">
+              Watch later
+            </LinkButton>
+          </div>
         }
       />
 
@@ -155,7 +162,7 @@ export default function Movies() {
               <div className="no-scrollbar -mx-4 flex scroll-px-4 snap-x snap-mandatory gap-5 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:-mx-10 lg:scroll-px-10 lg:px-10">
                 {rail.map((movie, index) => (
                   <div key={movie.id} className="w-40 shrink-0 snap-start sm:w-44">
-                    <MovieCard movie={movie} rank={index + 1} busy={busyId === movie.id} {...cardHandlers} />
+                    <MovieCard movie={movie} rank={index + 1} busy={busyId === movie.id} href={filmHref(movie)} {...cardHandlers} />
                   </div>
                 ))}
               </div>
@@ -209,7 +216,7 @@ export default function Movies() {
             ) : (
               <div className="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {visible.map((movie) => (
-                  <MovieCard key={movie.id} movie={movie} busy={busyId === movie.id} {...cardHandlers} />
+                  <MovieCard key={movie.id} movie={movie} busy={busyId === movie.id} href={filmHref(movie)} {...cardHandlers} />
                 ))}
               </div>
             )}
