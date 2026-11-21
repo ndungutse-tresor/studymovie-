@@ -27,7 +27,7 @@ apply → admitted → account → study chapter → exam ≥ pass mark
 | **Schedule with alerts** | Weekly study blocks in the learner's own IANA time zone, correct across daylight-saving changes. The server decides which occurrences are due; the client polls and raises an in-app reminder, plus a desktop notification where permitted. |
 | **Free-time viewing** | Browsing outside a session, a learner can **save a title for later** or **decline** it. Declined titles stop appearing in recommendations. |
 | **Top movies** | Titles are aggregated from free sources and ranked by popularity, with declined titles filtered out per learner. |
-| **Gallery wall** | `/app/movies` hangs the catalog on a curved 3D wall: the top ten, then rooms by genre. Scroll, drag or use the arrow keys to walk it; clicking a poster flies it into its film page (`/app/movies/:id`), laid out like a gallery shop page with Watch, Watch later and Not interested. The classic grid is still at `/app/movies/list`. |
+| **Gallery wall** | `/app/movies` hangs the catalog on a curved 3D wall: the top ten, then rooms by genre. Scroll, drag or use the arrow keys to walk it; clicking a poster brings it forward, and clicking again opens its film page (`/app/movies/:id`), laid out like a gallery shop page with Watch, Watch later and Not interested. Watch opens a session drawer so the clock never starts by accident. A sun/moon button switches day and night view. The classic grid is still at `/app/movies/list`. |
 
 ---
 

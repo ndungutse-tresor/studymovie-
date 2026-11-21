@@ -7,6 +7,7 @@ import { ReelHeader } from '../components/gallery/ReelHeader';
 import { FilmArt } from '../components/gallery/FilmArt';
 import { ScheduleAlerts } from '../components/ScheduleAlerts';
 import '../components/gallery/gallery.css';
+import '../components/gallery/reel.css';
 
 interface MoviesPayload {
   movies: Movie[];

@@ -5,8 +5,10 @@ import type { Movie, MovieDecision, RewardSession } from '../lib/types';
 import { clockFromSeconds } from '../lib/format';
 import { ReelHeader } from '../components/gallery/ReelHeader';
 import { FilmArt } from '../components/gallery/FilmArt';
+import { Drawer } from '../components/gallery/Drawer';
 import { ScheduleAlerts } from '../components/ScheduleAlerts';
 import '../components/gallery/gallery.css';
+import '../components/gallery/reel.css';
 
 const SOURCE_LABEL: Record<Movie['source'], string> = {
   archive: 'Internet Archive',
@@ -26,6 +28,7 @@ export default function FilmPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [sessionOpen, setSessionOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -259,8 +262,16 @@ export default function FilmPage() {
 
           <div className="gs-buy">
             {reward?.status === 'GRANTED' ? (
-              <button type="button" className="gs-cta" disabled={busy} onClick={() => void watch()}>
-                {busy ? 'Starting…' : `Watch now · ${reward.minutesGranted} min`}
+              <button
+                type="button"
+                className="gs-cta"
+                disabled={busy}
+                onClick={() => {
+                  setError(null);
+                  setSessionOpen(true);
+                }}
+              >
+                Watch now · {reward.minutesGranted} min
               </button>
             ) : playingThis ? (
               <Link className="gs-cta" to={`/app/watch/${reward!.id}`}>
@@ -287,6 +298,51 @@ export default function FilmPage() {
           ) : null}
         </div>
       </article>
+
+      {sessionOpen && reward?.status === 'GRANTED' ? (
+        <Drawer
+          title="Your session"
+          onClose={() => setSessionOpen(false)}
+          footer={(close) => (
+            <>
+              <p className="gs-total">
+                <span>Viewing time</span>
+                <span>{reward.minutesGranted} min</span>
+              </p>
+              <button type="button" className="gs-cta" disabled={busy} onClick={() => void watch()}>
+                {busy ? 'Starting…' : 'Start the clock'}
+              </button>
+              <button type="button" className="gs-cta is-light" onClick={close}>
+                Not yet
+              </button>
+            </>
+          )}
+        >
+          <div className="gs-line-item">
+            <span className="gs-line-thumb">
+              <FilmArt movie={movie} />
+            </span>
+            <div>
+              <p className="gs-line-title">{movie.title}</p>
+              <p className="gs-line-meta">
+                {[movie.year, movie.runtimeMinutes ? `${movie.runtimeMinutes} min` : null].filter(Boolean).join(' · ')}
+                <br />
+                Earned by clearing “{reward.chapterTitle}”.
+              </p>
+            </div>
+            <span className="gs-line-price">{reward.minutesGranted} min</span>
+          </div>
+          <p className="gs-fine">
+            The clock starts as soon as you press Start and can't be paused. When the time runs out the session closes
+            itself and your next chapter unlocks.
+          </p>
+          {error ? (
+            <p className="gs-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </Drawer>
+      ) : null}
       <ScheduleAlerts />
     </main>
   );

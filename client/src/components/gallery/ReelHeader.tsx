@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import type { RewardSession } from '../../lib/types';
+import { ThemeToggle } from './theme';
 
 const NAV = [
   { to: '/app', label: 'Dashboard', end: true },
@@ -47,9 +48,9 @@ export function ReelHeader({ reward, search, onSearch }: ReelHeaderProps) {
       <div className="gs-header-left">
         <Link to="/app" className="gs-mark" aria-label="StudyReel dashboard">
           <svg width="20" height="16" viewBox="0 0 20 16" aria-hidden="true">
-            <rect x="0.75" y="0.75" width="18.5" height="14.5" rx="2.5" fill="none" stroke="#111" strokeWidth="1.5" />
-            <path d="M5 1v14M15 1v14" stroke="#111" strokeWidth="1" opacity="0.45" />
-            <path d="M8.5 5.2v5.6L13 8 8.5 5.2Z" fill="#111" />
+            <rect x="0.75" y="0.75" width="18.5" height="14.5" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M5 1v14M15 1v14" stroke="currentColor" strokeWidth="1" opacity="0.45" />
+            <path d="M8.5 5.2v5.6L13 8 8.5 5.2Z" fill="currentColor" />
           </svg>
           StudyReel
         </Link>
@@ -76,6 +77,7 @@ export function ReelHeader({ reward, search, onSearch }: ReelHeaderProps) {
           </label>
         ) : null}
         {reward !== undefined ? <RewardChip reward={reward} /> : null}
+        <ThemeToggle storageKey="studyreel.theme" />
         <Link className="gs-icon-link" to="/app/settings" aria-label="Account settings">
           <span className="gs-initials">{initials || '·'}</span>
         </Link>
