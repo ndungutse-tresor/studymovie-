@@ -43,43 +43,43 @@ export function MovieCard({ movie, rank, busy, href, onPlay, onSave, onDecline, 
         <Poster
           title={movie.title}
           year={movie.year}
-          genre={rank === undefined ? movie.genres[0] : null}
+          genre={movie.genres[0]}
           posterUrl={movie.posterUrl}
           className="h-full w-full transition duration-500 group-hover:scale-[1.03]"
         />
 
-        {rank !== undefined ? (
-          <span className="absolute left-2.5 top-2.5 flex h-6 min-w-6 items-center justify-center rounded-md bg-ink-950/80 px-1.5 font-mono text-2xs font-semibold text-white ring-1 ring-white/15 backdrop-blur">
-            {rank}
-          </span>
-        ) : null}
-
-        {movie.rating !== null ? (
-          <span className="absolute right-2.5 top-2.5 flex items-center gap-1 rounded-md bg-ink-950/80 px-1.5 py-0.5 text-2xs font-semibold text-reel-300 ring-1 ring-white/10 backdrop-blur">
-            <Icon name="star" size={10} filled />
-            {movie.rating.toFixed(1)}
-          </span>
-        ) : null}
-
-        {!movie.decision && isRecent(movie.addedAt) ? (
-          <span className="absolute bottom-2.5 left-2.5 rounded-md bg-reel-400 px-1.5 py-0.5 text-2xs font-semibold text-ink-950">
-            New
-          </span>
-        ) : null}
-
-        {movie.decision ? (
-          <span
-            className={`absolute bottom-2.5 left-2.5 rounded-md px-1.5 py-0.5 text-2xs font-semibold backdrop-blur ${
-              movie.decision === 'DECLINED'
-                ? 'bg-rose-500/85 text-white'
-                : movie.decision === 'WATCHED'
-                  ? 'bg-ink-950/85 text-slate-300 ring-1 ring-white/10'
-                  : 'bg-brand-500/90 text-white'
-            }`}
-          >
-            {DECISION_LABEL[movie.decision]}
-          </span>
-        ) : null}
+        {/* Badges sit along the bottom edge so they never cover the cover's title. */}
+        <div className="pointer-events-none absolute inset-x-2.5 bottom-2.5 flex items-end justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            {rank !== undefined ? (
+              <span className="flex h-6 min-w-6 items-center justify-center rounded-md bg-ink-950/85 px-1.5 font-mono text-2xs font-semibold text-white ring-1 ring-white/15 backdrop-blur">
+                {rank}
+              </span>
+            ) : null}
+            {!movie.decision && isRecent(movie.addedAt) ? (
+              <span className="rounded-md bg-reel-400 px-1.5 py-0.5 text-2xs font-semibold text-ink-950">New</span>
+            ) : null}
+            {movie.decision ? (
+              <span
+                className={`rounded-md px-1.5 py-0.5 text-2xs font-semibold backdrop-blur ${
+                  movie.decision === 'DECLINED'
+                    ? 'bg-rose-500/85 text-white'
+                    : movie.decision === 'WATCHED'
+                      ? 'bg-ink-950/85 text-slate-300 ring-1 ring-white/10'
+                      : 'bg-brand-500/90 text-white'
+                }`}
+              >
+                {DECISION_LABEL[movie.decision]}
+              </span>
+            ) : null}
+          </div>
+          {movie.rating !== null ? (
+            <span className="flex items-center gap-1 rounded-md bg-ink-950/85 px-1.5 py-0.5 text-2xs font-semibold text-reel-300 ring-1 ring-white/10 backdrop-blur">
+              <Icon name="star" size={10} filled />
+              {movie.rating.toFixed(1)}
+            </span>
+          ) : null}
+        </div>
 
         {/* Synopsis on hover for pointer devices; the actions below stay reachable everywhere. */}
         <div className="pointer-events-none absolute inset-0 hidden flex-col justify-end bg-gradient-to-t from-ink-950 via-ink-950/85 to-ink-950/10 p-3.5 opacity-0 transition duration-300 group-hover:opacity-100 sm:flex">

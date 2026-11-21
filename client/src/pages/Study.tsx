@@ -228,7 +228,8 @@ export default function Study() {
                         </span>
                       </p>
                       <p className="mt-0.5 text-xs text-slate-500">
-                        Minimum study time is {Math.ceil(status.requiredSeconds / 60)} minutes
+                        Minimum study time is {Math.ceil(status.requiredSeconds / 60)}{' '}
+                        {Math.ceil(status.requiredSeconds / 60) === 1 ? 'minute' : 'minutes'}
                       </p>
                     </div>
                   </>
