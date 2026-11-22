@@ -22,6 +22,8 @@ interface Room {
   title: string;
   blurb: string;
   films: Movie[];
+  /** Genre a room is made of, so "Enter the collection" can show just that genre. */
+  genre?: string;
 }
 
 const POSTER_ASPECT = 2 / 3;
@@ -90,7 +92,7 @@ export default function MoviesGallery() {
     const rest: Movie[] = [];
     ranked.forEach(([name, films], index) => {
       if (index < MAX_GENRE_ROOMS && films.length >= 3 && name !== 'More films') {
-        result.push({ key: `genre-${name}`, title: name, blurb: 'Free to watch, public domain.', films });
+        result.push({ key: `genre-${name}`, title: name, blurb: 'Free to watch, public domain.', films, genre: name });
       } else rest.push(...films);
     });
     if (rest.length) result.push({ key: 'more', title: 'More in the catalog', blurb: 'Everything else, free to watch.', films: rest });
@@ -105,6 +107,8 @@ export default function MoviesGallery() {
           kind: 'placard' as const,
           aspect: 0.64,
           label: `${room.title}: ${room.films.length} films`,
+          title: room.title,
+          onEnter: room.genre ? () => setParams({ genre: room.genre as string }) : undefined,
           content: (
             <span className="gs-placard">
               <strong>{room.title}</strong>
@@ -123,7 +127,7 @@ export default function MoviesGallery() {
           ),
         })),
       ]),
-    [rooms],
+    [rooms, setParams],
   );
 
   return (
@@ -168,7 +172,9 @@ export default function MoviesGallery() {
           <GalleryWall
             items={items}
             storageKey={`studyreel.wall.${genre ?? 'all'}`}
-            hint="Scroll or drag to walk the screening room · Click a poster to open it"
+            hint="Scroll or drag to walk the screening room · Click a poster to look closer"
+            focusHint="Click the poster to open it · Scroll or click away to step back"
+            openLabel="Open the film"
             onOpen={(item) => navigate(`/app/movies/${encodeURIComponent(item.key.replace(/^film-/, ''))}`)}
           />
         )}
