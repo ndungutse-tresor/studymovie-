@@ -25,6 +25,7 @@ import Watchlist from './pages/Watchlist';
 import Schedule from './pages/Schedule';
 import Settings from './pages/Settings';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminApplications from './pages/AdminApplications';
 import AdminMovies from './pages/AdminMovies';
 import AdminLearning from './pages/AdminLearning';
 import NotFound from './pages/NotFound';
@@ -140,6 +141,7 @@ export default function App() {
           >
             <Route index element={<AdminDashboard />} />
             <Route path="movies" element={<AdminMovies />} />
+            <Route path="applications" element={<AdminApplications />} />
             <Route path="learning" element={<AdminLearning />} />
           </Route>
 

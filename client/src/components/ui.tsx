@@ -54,7 +54,7 @@ export function Button({
     <button
       type="button"
       disabled={disabled || loading}
-      className={`${BASE} disabled:cursor-not-allowed disabled:opacity-60 ${VARIANTS[variant]} ${SIZES[size]}
+      className={`ui-btn ui-btn-${variant} ${BASE} disabled:cursor-not-allowed disabled:opacity-60 ${VARIANTS[variant]} ${SIZES[size]}
         ${block ? 'w-full' : ''} ${className}`}
       {...rest}
     >
@@ -87,7 +87,7 @@ export function LinkButton({
   children,
 }: LinkButtonProps) {
   return (
-    <Link to={to} className={`${BASE} ${VARIANTS[variant]} ${SIZES[size]} ${block ? 'w-full' : ''} ${className}`}>
+    <Link to={to} className={`ui-btn ui-btn-${variant} ${BASE} ${VARIANTS[variant]} ${SIZES[size]} ${block ? 'w-full' : ''} ${className}`}>
       {icon ? <Icon name={icon} size={size === 'sm' ? 14 : 16} /> : null}
       {children}
       {iconAfter ? <Icon name={iconAfter} size={size === 'sm' ? 14 : 16} /> : null}
@@ -286,7 +286,7 @@ export function Callout({
   }[tone];
 
   return (
-    <div className={`flex gap-3 rounded-lg border px-4 py-3.5 text-sm ${styles.box}`} role="status">
+    <div className={`ui-callout ui-callout-${tone} flex gap-3 rounded-lg border px-4 py-3.5 text-sm ${styles.box}`} role="status">
       <Icon name={styles.icon} size={18} className="mt-0.5 shrink-0 opacity-80" />
       <div className="min-w-0">
         {title ? <p className="mb-0.5 font-semibold">{title}</p> : null}

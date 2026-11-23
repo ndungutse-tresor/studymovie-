@@ -1,6 +1,7 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
 import { ApiError, api } from '../lib/api';
-import { Button, Callout, Field, LinkButton, Select, TextArea, TextInput } from '../components/ui';
+import { Button, Callout, Field, Select, TextArea, TextInput } from '../components/ui';
+import { rise } from '../components/admin/GlassKit';
 
 type Level = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
 type StorageMode = 'object' | 'local' | 'disabled';
@@ -163,15 +164,13 @@ export default function AdminLearning() {
   const canPublish = course.title.trim().length >= 3 && lesson.title.trim().length >= 3 && resources.length > 0 && questions.length >= 3;
 
   return (
-    <div className="space-y-8">
-      <section className="flex flex-col justify-between gap-5 border-b border-white/[0.08] pb-7 sm:flex-row sm:items-end">
-        <div>
-          <p className="eyebrow text-reel-300">Curriculum authoring</p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">Create a learning course</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-400">Upload study material, review an AI-drafted exam, then publish.</p>
+    <div className="space-y-4">
+      <header className="ga-head">
+        <div {...rise(0)}>
+          <h1>Learning</h1>
+          <p>Upload study material, review an AI-drafted exam, then publish a course</p>
         </div>
-        <LinkButton to="/admin" variant="secondary" icon="arrow-left">Admin overview</LinkButton>
-      </section>
+      </header>
 
       {error ? <Callout tone="danger" title="Action failed">{error}</Callout> : null}
       {notice ? <Callout tone="success">{notice}</Callout> : null}
@@ -181,9 +180,9 @@ export default function AdminLearning() {
         </Callout>
       ) : null}
 
-      <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
-        <div className="space-y-8">
-          <section className="space-y-4 border-b border-white/[0.08] pb-8">
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]">
+        <div className="space-y-4">
+          <section {...rise(1, 'ga-card space-y-4')}>
             <h2 className="section-title text-lg">Course details</h2>
             <Field label="Course title" required>
               <TextInput required maxLength={160} value={course.title} onChange={(event) => updateCourse('title', event.target.value)} />
@@ -208,7 +207,7 @@ export default function AdminLearning() {
             </Field>
           </section>
 
-          <section className="space-y-4 border-b border-white/[0.08] pb-8">
+          <section {...rise(2, 'ga-card space-y-4')}>
             <h2 className="section-title text-lg">First lesson</h2>
             <Field label="Lesson title" required>
               <TextInput required maxLength={160} value={lesson.title} onChange={(event) => updateLesson('title', event.target.value)} />
@@ -232,7 +231,7 @@ export default function AdminLearning() {
             </div>
           </section>
 
-          <section className="space-y-4 border-b border-white/[0.08] pb-8">
+          <section {...rise(3, 'ga-card space-y-4')}>
             <div>
               <h2 className="section-title text-lg">Study resources</h2>
               <p className="mt-1 text-xs text-slate-500">PDF, DOC, DOCX, PPT, PPTX, MP4, WebM, OGG, MOV, M4V, MKV</p>
@@ -263,7 +262,7 @@ export default function AdminLearning() {
             ) : null}
           </section>
 
-          <section className="space-y-4">
+          <section {...rise(4, 'ga-card space-y-4')}>
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <h2 className="section-title text-lg">Exam draft</h2>
@@ -311,7 +310,7 @@ export default function AdminLearning() {
           </Button>
         </div>
 
-        <aside className="h-fit space-y-4 border-t border-white/[0.08] pt-6 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0">
+        <aside {...rise(2, 'ga-card h-fit space-y-4')}>
           <h2 className="section-title text-lg">Learner gate</h2>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between gap-3"><dt className="text-slate-500">Estimated lesson</dt><dd className="text-slate-200">{lesson.estimatedMinutes} min</dd></div>

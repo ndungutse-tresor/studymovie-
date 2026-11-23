@@ -1,261 +1,214 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { api, ApiError } from '../lib/api';
-import type { Application, MovieSyncSummary } from '../lib/types';
-import { Badge, Button, Callout, LinkButton, Spinner, TextArea } from '../components/ui';
+import type { MovieSyncSummary } from '../lib/types';
+import { useAdminStats } from '../components/admin/AdminStats';
+import {
+  BarChart,
+  Change,
+  Donut,
+  GaIcon,
+  Greeting,
+  Segmented,
+  StatCard,
+  Today,
+  initials,
+  rise,
+} from '../components/admin/GlassKit';
 
-type ApplicationFilter = 'ALL' | Application['status'];
-type AdminApplication = Application & {
-  phone: string | null;
-  country: string | null;
-  motivation: string;
+type Range = '4' | '8' | '12';
+
+const STATUS: Record<string, [string, string]> = {
+  PENDING: ['is-amber', 'In review'],
+  APPROVED: ['is-green', 'Approved'],
+  REJECTED: ['is-red', 'Declined'],
+  ENROLLED: ['is-blue', 'Enrolled'],
 };
 
-const FILTERS: { value: ApplicationFilter; label: string }[] = [
-  { value: 'ALL', label: 'All' },
-  { value: 'PENDING', label: 'Pending' },
-  { value: 'APPROVED', label: 'Approved' },
-  { value: 'REJECTED', label: 'Declined' },
-  { value: 'ENROLLED', label: 'Enrolled' },
-];
-
-const STATUS_TONE: Record<Application['status'], string> = {
-  PENDING: 'border-amber-400/20 bg-amber-400/10 text-amber-200',
-  APPROVED: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200',
-  REJECTED: 'border-rose-400/20 bg-rose-400/10 text-rose-200',
-  ENROLLED: 'border-sky-400/20 bg-sky-400/10 text-sky-200',
+const ACTIONS: Record<string, string> = {
+  'account.created': 'Created a learner account',
 };
 
-function readableDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value));
+function when(value: string) {
+  const date = new Date(value);
+  const days = Math.floor((Date.now() - date.getTime()) / 86_400_000);
+  if (days <= 0) return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 export default function AdminDashboard() {
-  const [applications, setApplications] = useState<AdminApplication[]>([]);
-  const [filter, setFilter] = useState<ApplicationFilter>('PENDING');
-  const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const { user } = useAuth();
+  const { stats, error, refresh } = useAdminStats();
+  const [range, setRange] = useState<Range>('8');
   const [syncing, setSyncing] = useState(false);
-  const [notes, setNotes] = useState<Record<string, string>>({});
-  const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [syncResult, setSyncResult] = useState<MovieSyncSummary | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
-  async function loadApplications() {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await api.get<{ applications: AdminApplication[] }>('/applications');
-      setApplications(result.applications);
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Could not load applications. Check the API connection.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void loadApplications();
-  }, []);
-
-  const counts = applications.reduce<Record<Application['status'], number>>(
-    (total, application) => {
-      total[application.status] += 1;
-      return total;
-    },
-    { PENDING: 0, APPROVED: 0, REJECTED: 0, ENROLLED: 0 },
+  const weeks = useMemo(
+    () =>
+      (stats?.applications.weekly ?? []).map((row) => ({
+        label: new Date(`${row.week}T00:00:00`).toLocaleDateString('en', { month: 'short', day: 'numeric' }),
+        value: row.count,
+        hint: `Week of ${new Date(`${row.week}T00:00:00`).toLocaleDateString('en', { month: 'long', day: 'numeric' })}`,
+      })),
+    [stats],
   );
-  const visibleApplications = applications.filter((application) => filter === 'ALL' || application.status === filter);
-
-  async function decide(application: AdminApplication, decision: 'APPROVED' | 'REJECTED') {
-    setBusyId(application.id);
-    setError(null);
-    setNotice(null);
-    try {
-      const result = await api.post<{ application: AdminApplication }>(`/applications/${application.id}/decision`, {
-        decision,
-        note: notes[application.id] ?? '',
-      });
-      setApplications((current) => current.map((item) => (item.id === application.id ? result.application : item)));
-      setNotice(
-        decision === 'APPROVED' && result.application.accessCode
-          ? `Approved ${application.fullName}. Access code: ${result.application.accessCode}`
-          : `${application.fullName} was ${decision === 'APPROVED' ? 'approved' : 'declined'}.`,
-      );
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Could not save this decision. Try again.');
-    } finally {
-      setBusyId(null);
-    }
-  }
 
   async function syncMovies() {
     setSyncing(true);
-    setError(null);
     setNotice(null);
+    setSyncError(null);
     try {
       const result = await api.post<{ sync: MovieSyncSummary }>('/movies/sync');
-      setSyncResult(result.sync);
-      setNotice(`Movie catalogue refreshed: ${result.sync.added} new titles, ${result.sync.total} total.`);
+      setNotice(`Film sources refreshed: ${result.sync.added} new titles, ${result.sync.total} in all.`);
+      await refresh();
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : 'Could not refresh the movie catalogue.');
+      setSyncError(caught instanceof ApiError ? caught.message : 'Could not refresh the film sources.');
     } finally {
       setSyncing(false);
     }
   }
 
+  const firstName = user?.fullName.trim().split(/\s+/)[0] ?? 'there';
+
+  if (!stats) {
+    return error ? (
+      <div className="ga-empty" role="alert">
+        <strong>{error}</strong>
+        <button className="ga-button" type="button" onClick={() => void refresh()}><GaIcon name="refresh" /> Try again</button>
+      </div>
+    ) : (
+      <div className="ga-loading" role="status" aria-label="Loading"><i /><i /><i /></div>
+    );
+  }
+
+  const { applications, learners, learning, rewards, films } = stats;
+  const pending = applications.byStatus.PENDING;
+  const passRate = learning.examsTaken ? (learning.examsPassed / learning.examsTaken) * 100 : 0;
+  const shown = weeks.slice(-Number(range));
+  const shownTotal = shown.reduce((sum, week) => sum + week.value, 0);
+  const trackTotal = applications.tracks.reduce((sum, track) => sum + track.count, 0);
+
   return (
-    <div className="space-y-8">
-      <section className="flex flex-col justify-between gap-5 border-b border-white/[0.08] pb-7 sm:flex-row sm:items-end">
-        <div>
-          <p className="eyebrow text-reel-300">Operations</p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">Admin overview</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-            Review admissions, issue learner access, and keep the film catalogue current.
-          </p>
+    <div>
+      <header className="ga-head">
+        <div {...rise(0)}>
+          <h1><Greeting name={firstName} /></h1>
+          <p><Today /> · {pending ? `${pending} ${pending === 1 ? 'application is' : 'applications are'} waiting for you` : 'No applications waiting'}</p>
         </div>
-        <Button variant="secondary" icon="refresh" loading={loading} onClick={() => void loadApplications()}>
-          Refresh applications
-        </Button>
-      </section>
-
-      {error ? <Callout tone="danger" title="Action failed">{error}</Callout> : null}
-      {notice ? <Callout tone="success">{notice}</Callout> : null}
-
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Application totals">
-        {FILTERS.slice(1).map(({ value, label }) => (
-          <button
-            type="button"
-            key={value}
-            onClick={() => setFilter(value)}
-            aria-pressed={filter === value}
-            className={`border p-4 text-left transition ${filter === value ? 'border-reel-300/40 bg-reel-300/[0.08]' : 'border-white/[0.08] bg-ink-900 hover:border-white/20'}`}
-          >
-            <span className="text-xs font-medium uppercase tracking-[0.12em] text-slate-400">{label}</span>
-            <span className="mt-2 block text-2xl font-semibold tabular-nums text-white">
-              {loading ? '—' : counts[value as Application['status']]}
-            </span>
+        <div {...rise(1, 'ga-head-actions')}>
+          <button className="ga-button" type="button" onClick={() => void syncMovies()} disabled={syncing}>
+            <GaIcon name="refresh" /> {syncing ? 'Syncing…' : 'Sync film sources'}
           </button>
-        ))}
-      </section>
-
-      <section className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_18rem]">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="section-title text-lg">Applications</h2>
-              <p className="mt-1 text-sm text-slate-500">Review commitment and motivation before making a decision.</p>
-            </div>
-            <div className="flex flex-wrap gap-1 rounded-lg border border-white/[0.08] bg-ink-900 p-1" aria-label="Filter applications">
-              {FILTERS.map(({ value, label }) => (
-                <button
-                  type="button"
-                  key={value}
-                  onClick={() => setFilter(value)}
-                  aria-pressed={filter === value}
-                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${filter === value ? 'bg-white/[0.1] text-white' : 'text-slate-400 hover:text-white'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-4 divide-y divide-white/[0.08] border-y border-white/[0.08]">
-            {loading ? (
-              <div className="flex items-center justify-center gap-3 py-16 text-sm text-slate-400"><Spinner /> Loading applications</div>
-            ) : visibleApplications.length === 0 ? (
-              <div className="py-14 text-center">
-                <p className="text-sm font-medium text-slate-200">No {filter === 'ALL' ? '' : filter.toLowerCase()} applications</p>
-                <p className="mt-1 text-xs text-slate-500">New submissions will appear here.</p>
-              </div>
-            ) : (
-              visibleApplications.map((application) => (
-                <article key={application.id} className="py-5 sm:py-6">
-                  <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-semibold text-white">{application.fullName}</h3>
-                        <Badge tone={STATUS_TONE[application.status]}>{application.status}</Badge>
-                      </div>
-                      <p className="mt-1 break-all text-sm text-slate-400">{application.email}</p>
-                    </div>
-                    <time className="shrink-0 text-xs text-slate-500" dateTime={application.submittedAt}>
-                      Applied {readableDate(application.submittedAt)}
-                    </time>
-                  </div>
-
-                  <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                    <div><dt className="text-xs text-slate-500">Track</dt><dd className="mt-1 text-slate-200">{application.trackLabel}</dd></div>
-                    <div><dt className="text-xs text-slate-500">Experience</dt><dd className="mt-1 text-slate-200">{application.experienceLevel.toLowerCase()}</dd></div>
-                    <div><dt className="text-xs text-slate-500">Study commitment</dt><dd className="mt-1 text-slate-200">{application.weeklyHours} hours / week</dd></div>
-                    <div><dt className="text-xs text-slate-500">Location</dt><dd className="mt-1 text-slate-200">{application.country || 'Not provided'}</dd></div>
-                  </dl>
-
-                  <details className="mt-4">
-                    <summary className="w-fit cursor-pointer text-xs font-medium text-brand-300 hover:text-brand-200">Read motivation and review note</summary>
-                    <div className="mt-3 space-y-3 border-l border-white/10 pl-4 text-sm leading-6 text-slate-300">
-                      <p className="whitespace-pre-wrap">{application.motivation}</p>
-                      {application.reviewNote ? <p className="text-xs text-slate-500">Current note: {application.reviewNote}</p> : null}
-                    </div>
-                  </details>
-
-                  {application.status === 'PENDING' ? (
-                    <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                      <label className="block">
-                        <span className="mb-1.5 block text-xs font-medium text-slate-400">Decision note</span>
-                        <TextArea
-                          rows={2}
-                          maxLength={500}
-                          value={notes[application.id] ?? ''}
-                          onChange={(event) => setNotes((current) => ({ ...current, [application.id]: event.target.value }))}
-                          placeholder="Optional note for the applicant"
-                          className="min-h-20"
-                        />
-                      </label>
-                      <div className="flex gap-2 sm:pb-1">
-                        <Button variant="danger" size="sm" loading={busyId === application.id} disabled={busyId !== null} onClick={() => void decide(application, 'REJECTED')}>
-                          Decline
-                        </Button>
-                        <Button variant="success" size="sm" loading={busyId === application.id} disabled={busyId !== null} onClick={() => void decide(application, 'APPROVED')}>
-                          Approve
-                        </Button>
-                      </div>
-                    </div>
-                  ) : application.status === 'APPROVED' && application.accessCode ? (
-                    <p className="mt-4 text-sm text-emerald-200">Learner access code: <span className="font-mono font-semibold">{application.accessCode}</span></p>
-                  ) : null}
-                </article>
-              ))
-            )}
-          </div>
+          <Link className="ga-button is-dark" to="/admin/applications"><GaIcon name="inbox" /> Review applications</Link>
         </div>
+      </header>
 
-        <aside className="h-fit border-t border-white/[0.08] pt-6 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0">
-          <p className="eyebrow">Content operations</p>
-          <h2 className="mt-2 text-lg font-semibold text-white">Film catalogue</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-400">Manage your hosted titles or refresh public-domain film sources.</p>
-          <LinkButton to="/admin/movies" variant="secondary" icon="film" block className="mt-5">
-            Manage movies
-          </LinkButton>
-          <LinkButton to="/admin/learning" variant="secondary" icon="library" block className="mt-2">
-            Create learning course
-          </LinkButton>
-          <Button className="mt-2 w-full" icon="refresh" loading={syncing} onClick={() => void syncMovies()}>
-            Sync movie sources
-          </Button>
-          {syncResult ? (
-            <dl className="mt-5 space-y-3 border-t border-white/[0.08] pt-4 text-sm">
-              <div className="flex justify-between gap-3"><dt className="text-slate-500">New titles</dt><dd className="font-medium text-white">{syncResult.added}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-slate-500">Total titles</dt><dd className="font-medium text-white">{syncResult.total}</dd></div>
-              {syncResult.sources.map((source) => (
-                <div key={source.name} className="flex justify-between gap-3 text-xs">
-                  <dt className="text-slate-500">{source.name}</dt><dd className="text-slate-300">{source.status}</dd>
+      {notice ? <p className="ga-notice is-success" role="status"><GaIcon name="check" />{notice}</p> : null}
+      {syncError ? <p className="ga-notice is-error" role="alert"><GaIcon name="alert" />{syncError}</p> : null}
+
+      <div className="ga-grid is-hero">
+        <section {...rise(2, 'ga-card')}>
+          <div className="ga-card-head">
+            <div>
+              <h2>Applications</h2>
+              <p>{shownTotal} {shownTotal === 1 ? 'person' : 'people'} applied in the last {range} weeks</p>
+            </div>
+            <div className="ga-card-tools">
+              <Segmented<Range> label="Applications period" value={range} onChange={setRange} options={[{ value: '4', label: '4 weeks' }, { value: '8', label: '8 weeks' }, { value: '12', label: '12 weeks' }]} />
+              <Link className="ga-button is-dark is-small" to="/admin/applications"><GaIcon name="inbox" /> Open applications</Link>
+            </div>
+          </div>
+          <BarChart data={shown} format={(value) => String(Math.round(value))} empty="Applications will chart here week by week." />
+        </section>
+
+        <section {...rise(3, 'ga-card')}>
+          <div className="ga-card-head">
+            <div><h2>Applicants by track</h2><p>Everyone who has applied</p></div>
+          </div>
+          {trackTotal ? (
+            <Donut
+              data={applications.tracks.map((track) => ({ label: track.label, value: track.count }))}
+              center={String(trackTotal)}
+              centerLabel="applicants"
+              format={(value) => String(value)}
+            />
+          ) : <div className="ga-empty"><GaIcon name="users" size={22} /><span>No applications yet.</span></div>}
+        </section>
+      </div>
+
+      <div className="ga-grid is-four">
+        <StatCard index={4} icon="inbox" value={pending} label="Waiting for review" sub={`${applications.byStatus.APPROVED} approved, not yet enrolled`} />
+        <StatCard index={5} icon="users" value={learners.total} label="Learners" sub={`${learners.thisMonth} joined this month`} badge={<Change now={learners.thisMonth} before={learners.lastMonth} />} />
+        <StatCard index={6} icon="graduation" value={learning.courses} label="Courses" sub={`${learning.chapters} chapters · ${learning.enrollments} enrolments`} />
+        <StatCard index={7} icon="percent" value={passRate} format={(value) => `${value.toFixed(1)}%`} label="Exam pass rate" sub={`${learning.examsPassed} of ${learning.examsTaken} passed, last 30 days`} />
+        <StatCard index={8} icon="clock" value={rewards.minutesGranted} label="Minutes earned" sub="Reward time granted, last 30 days" />
+        <StatCard index={9} icon="play" value={rewards.minutesWatched} label="Minutes watched" sub={`${rewards.sessions} reward sessions`} />
+        <StatCard index={10} icon="film" value={films.total} label="Films in the catalogue" sub={`${films.bySource.length} ${films.bySource.length === 1 ? 'source' : 'sources'}`} />
+        <StatCard index={11} icon="activity" value={rewards.activeSessions} label="Watching now" sub="Reward sessions running" />
+      </div>
+
+      <div className="ga-grid is-hero">
+        <section {...rise(12, 'ga-card')}>
+          <div className="ga-card-head">
+            <div><h2>Latest applications</h2><p>The newest people asking to join</p></div>
+            <Link className="ga-button is-small" to="/admin/applications">All applications <GaIcon name="up" /></Link>
+          </div>
+          {applications.recent.length ? (
+            <div className="ga-table-wrap">
+              <table className="ga-table">
+                <thead><tr><th>Applicant</th><th>Track</th><th>Hours</th><th>Status</th><th>When</th></tr></thead>
+                <tbody>
+                  {applications.recent.map((application) => {
+                    const [tone, label] = STATUS[application.status] ?? ['', application.status];
+                    return (
+                      <tr key={application.id}>
+                        <td><div className="ga-person"><span className="ga-avatar">{initials(application.fullName)}</span><div><strong>{application.fullName}</strong><small>{application.email}</small></div></div></td>
+                        <td>{application.trackLabel}</td>
+                        <td>{application.weeklyHours} h/week</td>
+                        <td><span className={`ga-chip ${tone}`}><span className="ga-pip" />{label}</span></td>
+                        <td>{when(application.submittedAt)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : <div className="ga-empty"><GaIcon name="inbox" size={22} /><span>Applications will appear here.</span></div>}
+        </section>
+
+        <section {...rise(13, 'ga-card')}>
+          <div className="ga-card-head">
+            <div><h2>Film sources</h2><p>Where the catalogue comes from</p></div>
+            <Link className="ga-button is-small" to="/admin/movies">Films</Link>
+          </div>
+          <div className="ga-feed">
+            {films.sources.length ? films.sources.map((source) => (
+              <div className="ga-feed-item" key={source.name}>
+                <span className="ga-stat-icon"><GaIcon name={source.status === 'ok' ? 'check' : source.status === 'disabled' ? 'x' : 'alert'} /></span>
+                <div>
+                  <p><strong>{source.name}</strong> · {source.item_count} titles</p>
+                  <small>{source.status === 'ok' ? 'Working' : source.status === 'disabled' ? 'Turned off' : 'Not reachable'} · synced {when(source.synced_at)}</small>
                 </div>
-              ))}
-            </dl>
-          ) : null}
-        </aside>
-      </section>
+              </div>
+            )) : films.bySource.map((row) => (
+              <div className="ga-feed-item" key={row.source}>
+                <span className="ga-stat-icon"><GaIcon name="film" /></span>
+                <div><p><strong>{row.source}</strong></p><small>{row.count} titles</small></div>
+              </div>
+            ))}
+            {stats.activity.slice(0, 3).map((event) => (
+              <div className="ga-feed-item" key={event.id}>
+                <span className="ga-stat-icon"><GaIcon name="userPlus" /></span>
+                <div><p>{ACTIONS[event.action] ?? event.action}{event.by ? ` · ${event.by}` : ''}</p><small>{when(event.at)}</small></div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

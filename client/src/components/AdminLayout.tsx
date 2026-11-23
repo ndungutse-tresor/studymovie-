@@ -1,41 +1,67 @@
-import { useNavigate, Outlet } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Brand } from './Brand';
-import { Icon } from './Icon';
-import { Button } from './ui';
+import AdminShell, { type ShellNavGroup, type ShellSearch } from './admin/AdminShell';
+import { AdminStatsProvider, useAdminStats } from './admin/AdminStats';
+import './admin/glass-admin.css';
+import './admin/reel-admin.css';
 
-export function AdminLayout() {
+function ReelAdminShell() {
   const { user, logout } = useAuth();
+  const { stats } = useAdminStats();
   const navigate = useNavigate();
+  const location = useLocation();
+  const pending = stats?.applications.byStatus.PENDING ?? 0;
+  const enrolled = stats?.applications.byStatus.ENROLLED ?? 0;
+  const admitted = enrolled + (stats?.applications.byStatus.APPROVED ?? 0);
 
-  async function handleSignOut() {
-    await logout();
-    navigate('/login', { replace: true });
-  }
+  const groups: ShellNavGroup[] = [
+    { label: 'Dashboard', items: [{ href: '/admin', label: 'Overview', icon: 'home' }] },
+    { label: 'Admissions', items: [{ href: '/admin/applications', label: 'Applications', icon: 'inbox', count: pending }] },
+    {
+      label: 'Content',
+      items: [
+        { href: '/admin/movies', label: 'Films', icon: 'film' },
+        { href: '/admin/learning', label: 'Learning', icon: 'graduation' },
+      ],
+    },
+    { label: 'System', items: [{ href: '/app', label: 'Learner app', icon: 'play' }] },
+  ];
+
+  const searches: ShellSearch[] = [
+    { label: 'Find applications matching', icon: 'inbox', href: (q) => `/admin/applications?q=${encodeURIComponent(q)}` },
+  ];
 
   return (
-    <div className="min-h-screen bg-ink-950">
-      <header className="sticky top-0 z-30 border-b border-white/[0.08] bg-ink-950/95 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-5">
-            <Brand to="/admin" />
-            <span className="hidden h-6 w-px bg-white/10 sm:block" />
-            <span className="hidden items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-reel-300 sm:inline-flex">
-              <Icon name="shield" size={15} />
-              Administration
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden max-w-48 truncate text-xs text-slate-400 md:block">{user?.email}</span>
-            <Button variant="secondary" size="sm" icon="logout" onClick={() => void handleSignOut()}>
-              Sign out
-            </Button>
-          </div>
-        </div>
-      </header>
-      <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+    <AdminShell
+      brand={{ mark: 'S', title: 'StudyReel Admin', subtitle: 'Control center', href: '/admin' }}
+      groups={groups}
+      user={{ name: user?.fullName ?? 'Administrator', role: 'Administrator', href: '/admin' }}
+      meter={stats ? { label: 'Admitted learners', value: enrolled, total: Math.max(admitted, 1), caption: `${enrolled} of ${admitted} enrolled` } : undefined}
+      alerts={{
+        count: pending,
+        href: '/admin/applications',
+        label: pending ? `${pending} ${pending === 1 ? 'application is' : 'applications are'} waiting` : 'No applications waiting',
+      }}
+      site={{ href: '/', label: 'Open the StudyReel site' }}
+      searches={searches}
+      searchPlaceholder="Search pages and applicants…"
+      onSignOut={async () => {
+        await logout();
+        navigate('/login', { replace: true });
+      }}
+    >
+      {/* Keyed by path so every admin page floats in on the glass sheet. */}
+      <div className="ga-page" key={location.pathname}>
         <Outlet />
-      </main>
-    </div>
+      </div>
+    </AdminShell>
+  );
+}
+
+export function AdminLayout() {
+  return (
+    <AdminStatsProvider>
+      <ReelAdminShell />
+    </AdminStatsProvider>
   );
 }

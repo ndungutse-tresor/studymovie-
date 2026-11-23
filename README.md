@@ -93,6 +93,22 @@ for current limits.
 
 Open http://localhost:5173, apply, and the flow runs end to end.
 
+### Admin workspace
+
+The admin area (`/admin`) is a frosted-glass control centre over a teal-to-blue
+backdrop: a grouped sidebar (Overview, Applications with a waiting count, Films,
+Learning), a top bar with a ⌘K / Ctrl+K search, and pages that float in card by
+card while numbers count up and charts draw themselves.
+
+- **Overview** greets the administrator, charts applications per week (4, 8 or
+  12 weeks), splits applicants by track, and shows the review queue, learners,
+  courses, exam pass rate, reward minutes earned and watched, the film catalogue
+  and its sources. The figures come from `GET /api/admin/stats`.
+- **Applications** (`/admin/applications`) shows each applicant as a review tile
+  with their track, weekly hours, experience, country and motivation, an optional
+  note, and Decline / Approve buttons; approving shows the access code.
+- **Films** and **Learning** keep their existing tools on the same glass.
+
 ### Admin-created learning courses
 
 Administrators can create a course and first lesson from `/admin/learning`.

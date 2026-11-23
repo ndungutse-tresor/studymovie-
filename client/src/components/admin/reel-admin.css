@@ -1,0 +1,103 @@
+/*
+ * StudyReel's form controls and dark-theme utilities, re-read for the light glass
+ * sheet of the admin workspace. Scoped to .ga-panel, so the learner app is untouched.
+ */
+
+/* text */
+.ga-panel :is(.text-white, .text-slate-100, .text-slate-200, .section-title) { color: var(--ga-ink); }
+.ga-panel .text-slate-300 { color: var(--ga-text); }
+.ga-panel :is(.text-slate-400, .text-slate-500) { color: var(--ga-muted); }
+.ga-panel .text-reel-300 { color: var(--ga-amber); }
+.ga-panel :is(.text-brand-200, .text-brand-300, .text-brand-400) { color: var(--ga-blue); }
+.ga-panel :is(.text-emerald-100, .text-emerald-200, .text-emerald-300) { color: var(--ga-green); }
+.ga-panel :is(.text-rose-100, .text-rose-200, .text-rose-300) { color: var(--ga-red); }
+.ga-panel :is(.text-amber-100, .text-amber-200) { color: var(--ga-amber); }
+.ga-panel .section-title { font-weight: 650; }
+
+/* surfaces and lines */
+.ga-panel [class*='border-white/'] { border-color: var(--ga-line-strong); }
+.ga-panel [class*='divide-white/'] > :not(:first-child) { border-color: var(--ga-line-strong); }
+.ga-panel :is(.bg-ink-950, .bg-ink-900, .bg-ink-850, .bg-ink-800) { background-color: rgba(255, 255, 255, 0.5); }
+.ga-panel :is([class~='bg-white/[0.04]'], [class~='bg-white/[0.05]'], [class~='bg-white/[0.08]'], [class~='bg-white/[0.1]']) { background-color: rgba(16, 40, 64, 0.07); }
+/* a chosen option in a dark-theme toggle becomes the dark pill */
+.ga-panel [class~='bg-white/[0.1]'][class~='text-white'] { background-color: #0d1724; color: #fff; }
+
+/* fields */
+.ga-panel .label { margin-bottom: 6px; color: var(--ga-text); font: 600 11.5px/1.3 var(--ga-sans); }
+.ga-panel .input {
+  min-height: 36px;
+  height: auto;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, 0.62);
+  box-shadow: none;
+  color: var(--ga-ink);
+  font: 500 12.5px/1.4 var(--ga-sans);
+}
+.ga-panel .input::placeholder { color: var(--ga-faint); }
+.ga-panel .input:hover { border-color: rgba(255, 255, 255, 1); }
+.ga-panel .input:focus { border-color: rgba(31, 163, 224, 0.6); background-color: rgba(255, 255, 255, 0.88); box-shadow: 0 0 0 3px rgba(31, 163, 224, 0.15); }
+.ga-panel textarea.input { padding-top: 9px; padding-bottom: 9px; }
+.ga-panel select.input { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235d6f82' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); }
+.ga-panel .input-error { border-color: rgba(194, 59, 59, 0.6); }
+.ga-panel .hint { color: var(--ga-muted); }
+.ga-panel .field-error { color: var(--ga-red); }
+.ga-panel .eyebrow { color: var(--ga-faint); }
+.ga-panel input[type='file']::file-selector-button { border: 0; border-radius: 999px; background: #0d1724; color: #fff; }
+.ga-panel input[type='checkbox'], .ga-panel input[type='radio'] { accent-color: #1d90d4; }
+.ga-panel code { padding: 1px 5px; border-radius: 6px; background: rgba(16, 40, 64, 0.08); }
+
+/* buttons from the learner app's kit */
+.ga-panel .ui-btn {
+  border-radius: 999px;
+  font-family: var(--ga-sans);
+  font-weight: 600;
+  box-shadow: none;
+  transition: transform 220ms var(--ga-ease), background-color 200ms ease, opacity 200ms ease;
+}
+.ga-panel .ui-btn:hover:not(:disabled) { transform: translateY(-1px); }
+.ga-panel :is(.ui-btn-primary, .ui-btn-success, .ui-btn-reel, .ui-btn-light) { border: 1px solid #0d1724; background: #0d1724; color: #fff; }
+.ga-panel :is(.ui-btn-primary, .ui-btn-success, .ui-btn-reel, .ui-btn-light):hover:not(:disabled) { background: #1a2738; }
+.ga-panel .ui-btn-secondary { border: 1px solid rgba(255, 255, 255, 0.85); background: rgba(255, 255, 255, 0.55); color: #23384d; }
+.ga-panel .ui-btn-secondary:hover:not(:disabled) { background: rgba(255, 255, 255, 0.88); border-color: rgba(255, 255, 255, 0.95); }
+.ga-panel .ui-btn-ghost { color: var(--ga-muted); }
+.ga-panel .ui-btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.55); color: var(--ga-ink); }
+.ga-panel .ui-btn-danger { border: 1px solid rgba(194, 59, 59, 0.25); background: rgba(255, 255, 255, 0.6); color: var(--ga-red); }
+.ga-panel .ui-btn-danger:hover:not(:disabled) { background: rgba(255, 255, 255, 0.9); }
+
+/* notices from the learner app's kit */
+.ga-panel .ui-callout {
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.66);
+  animation: ga-pop 260ms var(--ga-ease) both;
+}
+.ga-panel .ui-callout-info { color: var(--ga-blue); }
+.ga-panel .ui-callout-warning { color: var(--ga-amber); }
+.ga-panel .ui-callout-danger { color: var(--ga-red); }
+.ga-panel .ui-callout-success { color: var(--ga-green); }
+
+/* applicant artwork on an application tile */
+.ga-applicant { flex-direction: column; gap: 10px; }
+.ga-applicant-initials {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  font: 700 22px/1 var(--ga-sans);
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.45);
+}
+.ga-applicant-track { color: rgba(255, 255, 255, 0.92); font: 600 11.5px/1 var(--ga-sans); letter-spacing: 0.04em; }
+.ga-motivation { margin-top: 8px !important; color: var(--ga-text) !important; }
+.ga-link { justify-self: start; width: fit-content; padding: 0; border: 0; background: none; color: var(--ga-blue); font: 600 11.5px var(--ga-sans); cursor: pointer; }
+.ga-link:hover { text-decoration: underline; }
+.ga-code { margin-top: 8px !important; padding: 8px 10px; border-radius: 11px; background: var(--ga-green-bg); color: var(--ga-green) !important; }
+.ga-code strong { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.04em; }
+.ga-field > span small { font-weight: 500; }
+.ga-panel [role='group'] > button { white-space: nowrap; }

@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api } from '../lib/api';
 import type { Movie } from '../lib/types';
-import { Button, Callout, Field, LinkButton, Select, TextArea, TextInput } from '../components/ui';
+import { Button, Callout, Field, Select, TextArea, TextInput } from '../components/ui';
+import { GaIcon, rise } from '../components/admin/GlassKit';
 
 type ReelPlatform = 'facebook' | 'tiktok' | 'instagram';
 
@@ -256,31 +257,30 @@ export default function AdminMovies() {
   }
 
   return (
-    <div className="space-y-8">
-      <section className="flex flex-col justify-between gap-5 border-b border-white/[0.08] pb-7 sm:flex-row sm:items-end">
-        <div>
-          <p className="eyebrow text-reel-300">Content operations</p>
-          <h1 className="mt-2 text-3xl font-semibold text-white">Manage movies</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-400">Add and maintain hosted movie links shown in the learner catalog.</p>
-          <p className="mt-2 text-xs text-slate-500">
+    <div className="space-y-4">
+      <header className="ga-head">
+        <div {...rise(0)}>
+          <h1>Films</h1>
+          <p>
+            Hosted titles learners can earn time to watch ·{' '}
             {storageMode === 'object'
-              ? 'Video uploads use cloud object storage.'
+              ? 'video uploads use cloud object storage'
               : storageMode === 'local'
-                ? 'Video uploads are stored on this development server.'
-                : 'Video uploads are disabled until object storage is configured.'}
+                ? 'video uploads are stored on this development server'
+                : 'video uploads are off until object storage is configured'}
           </p>
         </div>
-        <div className="flex gap-2">
-          <LinkButton to="/admin" variant="secondary" icon="arrow-left">Admin overview</LinkButton>
-          <Button icon="plus" onClick={startNewMovie}>Add movie</Button>
+        <div {...rise(1, 'ga-head-actions')}>
+          <button className="ga-button" type="button" onClick={() => void loadMovies()} disabled={loading}><GaIcon name="refresh" /> {loading ? 'Refreshing…' : 'Refresh'}</button>
+          <button className="ga-button is-dark" type="button" onClick={startNewMovie}><GaIcon name="plus" /> Add a film</button>
         </div>
-      </section>
+      </header>
 
       {error ? <Callout tone="danger" title="Action failed">{error}</Callout> : null}
       {notice ? <Callout tone="success">{notice}</Callout> : null}
 
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,25rem)]">
-        <section aria-labelledby="managed-movies-heading">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,25rem)]">
+        <section aria-labelledby="managed-movies-heading" {...rise(2, 'ga-card')}>
           <div className="mb-4 flex items-baseline justify-between gap-4">
             <div>
               <h2 id="managed-movies-heading" className="section-title text-lg">Managed catalog</h2>
@@ -320,7 +320,7 @@ export default function AdminMovies() {
           </div>
         </section>
 
-        <form onSubmit={(event) => void saveMovie(event)} className="space-y-4 border-t border-white/[0.08] pt-6 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+        <form onSubmit={(event) => void saveMovie(event)} {...rise(3, 'ga-card space-y-4')}>
           <div className="flex items-center justify-between gap-3">
             <h2 className="section-title text-lg">{selectedId ? 'Edit movie' : 'New movie'}</h2>
             {selectedId ? <Button type="button" variant="danger" size="sm" icon="trash" loading={deleting} onClick={() => void deleteMovie()}>Delete</Button> : null}

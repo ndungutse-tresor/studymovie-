@@ -19,6 +19,7 @@ import { moviesRouter } from './routes/movies.js';
 import { scheduleRouter } from './routes/schedule.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { cronRouter } from './routes/cron.js';
+import { adminRouter } from './routes/admin.js';
 import { verifyAccessToken } from './lib/tokens.js';
 
 export function createApp() {
@@ -143,6 +144,7 @@ export function createApp() {
   app.use('/api/schedule', scheduleRouter);
   app.use('/api/dashboard', dashboardRouter);
   app.use('/api/cron', cronRouter);
+  app.use('/api/admin', adminRouter);
 
   if (config.isProduction) {
     const clientDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../client/dist');
