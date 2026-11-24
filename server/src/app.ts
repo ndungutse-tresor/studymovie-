@@ -21,6 +21,7 @@ import { dashboardRouter } from './routes/dashboard.js';
 import { cronRouter } from './routes/cron.js';
 import { adminRouter } from './routes/admin.js';
 import { verifyAccessToken } from './lib/tokens.js';
+import { signInBlock } from './lib/email-access.js';
 
 export function createApp() {
   const app = express();
@@ -103,9 +104,14 @@ export function createApp() {
       role: 'LEARNER' | 'ADMIN';
       timezone: string;
       status: string;
-    }>('SELECT id, email, full_name, role, timezone, status FROM users WHERE id = ?', userId)
+      email_verified_at: string | null;
+      email_approved_at: string | null;
+    }>(
+      'SELECT id, email, full_name, role, timezone, status, email_verified_at, email_approved_at FROM users WHERE id = ?',
+      userId,
+    )
       .then((row) => {
-        if (row && row.status === 'ACTIVE') {
+        if (row && row.status === 'ACTIVE' && !signInBlock(row)) {
           req.user = {
             id: row.id,
             email: row.email,

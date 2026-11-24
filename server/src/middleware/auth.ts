@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { one } from '../db/index.js';
+import { signInBlock } from '../lib/email-access.js';
 import { HttpError } from '../lib/http-error.js';
 import { verifyAccessToken } from '../lib/tokens.js';
 
@@ -39,10 +40,18 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
       role: 'LEARNER' | 'ADMIN';
       timezone: string;
       status: string;
-    }>('SELECT id, email, full_name, role, timezone, status FROM users WHERE id = ?', payload.sub);
+      email_verified_at: string | null;
+      email_approved_at: string | null;
+    }>(
+      'SELECT id, email, full_name, role, timezone, status, email_verified_at, email_approved_at FROM users WHERE id = ?',
+      payload.sub,
+    );
 
     if (!row) return next(HttpError.unauthorized('Account no longer exists.'));
     if (row.status !== 'ACTIVE') return next(HttpError.forbidden('This account is suspended.'));
+    // Checked on every request, so withdrawing an approval ends access at once.
+    const blocked = signInBlock(row);
+    if (blocked) return next(new HttpError(401, blocked.code, blocked.message));
 
     req.user = {
       id: row.id,

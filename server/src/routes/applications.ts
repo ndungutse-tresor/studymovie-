@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../middleware/async-handler.js';
 import { requireAdmin, requireAuth } from '../middleware/auth.js';
 import { query } from '../db/index.js';
+import { GMAIL_ONLY_MESSAGE, isGmail } from '../lib/email-access.js';
 import { HttpError } from '../lib/http-error.js';
 import {
   TRACKS,
@@ -35,7 +36,7 @@ const applyLimiter = rateLimit({
 
 const applicationSchema = z.object({
   fullName: z.string().trim().min(2, 'Enter your full name.').max(120),
-  email: z.string().trim().email('Enter a valid email address.'),
+  email: z.string().trim().email('Enter a valid email address.').refine(isGmail, GMAIL_ONLY_MESSAGE),
   phone: z.string().trim().max(40).optional().or(z.literal('')),
   country: z.string().trim().max(80).optional().or(z.literal('')),
   track: z.enum(TRACKS),

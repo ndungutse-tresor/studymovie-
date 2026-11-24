@@ -25,6 +25,13 @@ export interface AuthResponse {
   user: User;
 }
 
+/** A new Gmail account waits for the emailed confirmation link. */
+export interface PendingConfirmation {
+  verify: true;
+  email: string;
+  sent: boolean;
+}
+
 export interface CourseSummary {
   id: string;
   slug: string;
@@ -245,6 +252,8 @@ export interface Application {
   accessCode: string | null;
   submittedAt: string;
   reviewedAt: string | null;
+  gmail?: boolean;
+  adminApproved?: boolean;
 }
 
 export interface DashboardData {

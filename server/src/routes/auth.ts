@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../middleware/async-handler.js';
 import { requireAuth } from '../middleware/auth.js';
 import * as auth from '../services/auth.js';
+import { confirmEmail } from '../services/verification.js';
 
 export const authRouter = Router();
 
@@ -41,6 +42,34 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const { email, password } = loginSchema.parse(req.body);
     res.json(await auth.login(email, password));
+  }),
+);
+
+const verifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: { code: 'TOO_MANY_REQUESTS', message: 'Too many attempts. Try again shortly.' } },
+});
+
+/** Opens a confirmation link: the web page posts the token from the email. */
+authRouter.post(
+  '/verify',
+  verifyLimiter,
+  asyncHandler(async (req, res) => {
+    const { token } = z.object({ token: z.string().trim().min(20).max(200) }).parse(req.body);
+    res.json({ status: await confirmEmail(token) });
+  }),
+);
+
+/** Sends another confirmation link. */
+authRouter.post(
+  '/verification',
+  authLimiter,
+  asyncHandler(async (req, res) => {
+    const { email } = z.object({ email: z.string().trim().email('Enter a valid email address.') }).parse(req.body);
+    res.json(await auth.resendConfirmation(email));
   }),
 );
 

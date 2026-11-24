@@ -12,6 +12,7 @@ import Apply from './pages/Apply';
 import ApplicationStatus from './pages/ApplicationStatus';
 import Register from './pages/Register';
 import Login from './pages/Login';
+import VerifyEmail from './pages/VerifyEmail';
 import Dashboard from './pages/Dashboard';
 import Catalog from './pages/Catalog';
 import CourseDetail from './pages/CourseDetail';
@@ -28,6 +29,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminApplications from './pages/AdminApplications';
 import AdminMovies from './pages/AdminMovies';
 import AdminLearning from './pages/AdminLearning';
+import AdminLearners from './pages/AdminLearners';
 import NotFound from './pages/NotFound';
 
 function FullPageLoader() {
@@ -75,6 +77,7 @@ export default function App() {
             <Route path="/catalog" element={<PublicCatalog />} />
             <Route path="/apply" element={<Apply />} />
             <Route path="/application-status" element={<ApplicationStatus />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
             <Route
               path="/register"
               element={
@@ -142,6 +145,7 @@ export default function App() {
             <Route index element={<AdminDashboard />} />
             <Route path="movies" element={<AdminMovies />} />
             <Route path="applications" element={<AdminApplications />} />
+            <Route path="learners" element={<AdminLearners />} />
             <Route path="learning" element={<AdminLearning />} />
           </Route>
 

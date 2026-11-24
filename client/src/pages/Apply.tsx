@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ApiError, api } from '../lib/api';
 import type { Application, Level } from '../lib/types';
+import { isGmail } from '../lib/email';
 import { Button, Callout, Field, Select, TextArea, TextInput } from '../components/ui';
 import { Icon } from '../components/Icon';
 
@@ -55,9 +56,14 @@ export default function Apply() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    setSubmitting(true);
     setFormError(null);
     setFieldErrors({});
+    if (form.email.trim() && !isGmail(form.email)) {
+      setFieldErrors({ email: 'Use a Gmail address (ending in @gmail.com).' });
+      setFormError('Only Gmail addresses are accepted.');
+      return;
+    }
+    setSubmitting(true);
 
     try {
       const payload = await api.post<{ application: Application }>('/applications', form);
@@ -216,7 +222,13 @@ export default function Apply() {
                   />
                 </Field>
 
-                <Field label="Email address" htmlFor="email" required error={fieldErrors.email}>
+                <Field
+                  label="Gmail address"
+                  htmlFor="email"
+                  required
+                  hint="Only Gmail addresses are accepted. We email a link to confirm it when you create your account."
+                  error={fieldErrors.email}
+                >
                   <TextInput
                     id="email"
                     type="email"
@@ -224,7 +236,7 @@ export default function Apply() {
                     onChange={(event) => set('email', event.target.value)}
                     invalid={Boolean(fieldErrors.email)}
                     autoComplete="email"
-                    placeholder="you@example.com"
+                    placeholder="you@gmail.com"
                     required
                   />
                 </Field>

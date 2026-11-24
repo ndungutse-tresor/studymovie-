@@ -1,12 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, onSessionExpired, tokenStore } from '../lib/api';
-import type { AuthResponse, User } from '../lib/types';
+import type { AuthResponse, PendingConfirmation, User } from '../lib/types';
 
 interface AuthContextValue {
   user: User | null;
   ready: boolean;
   login: (email: string, password: string) => Promise<User>;
-  register: (input: { accessCode: string; password: string; timezone?: string }) => Promise<User>;
+  /** Signs in straight away only when the account needs no email confirmation. */
+  register: (input: { accessCode: string; password: string; timezone?: string }) => Promise<User | PendingConfirmation>;
   logout: () => Promise<void>;
   updateUser: (next: User) => void;
 }
@@ -54,7 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(
     async (input: { accessCode: string; password: string; timezone?: string }) => {
-      const result = await api.post<AuthResponse>('/auth/register', input);
+      const result = await api.post<AuthResponse | PendingConfirmation>('/auth/register', input);
+      if ('verify' in result) return result;
       tokenStore.save(result);
       setUser(result.user);
       return result.user;

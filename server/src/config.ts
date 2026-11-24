@@ -141,6 +141,25 @@ export const config = {
     .map((value) => value.trim())
     .filter(Boolean),
 
+  /**
+   * Outgoing mail goes through a Gmail account with an app password. Without
+   * it, development prints each message to the console instead of sending it,
+   * and production refuses new accounts because nobody could confirm them.
+   */
+  mail: {
+    gmailUser: process.env.GMAIL_USER?.trim() ?? '',
+    gmailAppPassword: (process.env.GMAIL_APP_PASSWORD ?? '').replace(/\s+/g, ''),
+    fromName: process.env.MAIL_FROM_NAME?.trim() || 'StudyReel',
+  },
+
+  /** Public address of the web app, used for links inside emails. */
+  appUrl: (
+    process.env.APP_URL ??
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined) ??
+    process.env.RENDER_EXTERNAL_URL ??
+    (process.env.CLIENT_ORIGIN ?? 'http://localhost:5173').split(',')[0]!.trim()
+  ).replace(/\/+$/, ''),
+
   learning: {
     /** Minimum seconds a learner must spend on a chapter before the exam unlocks. */
     minimumStudySeconds: int('MIN_STUDY_SECONDS', 120),

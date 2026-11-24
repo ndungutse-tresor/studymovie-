@@ -102,8 +102,8 @@ async function seedAdmin(): Promise<void> {
   if (existing) return;
 
   await run(
-    `INSERT INTO users (id, full_name, email, password_hash, role, timezone)
-     VALUES (?, ?, ?, ?, 'ADMIN', 'UTC')`,
+    `INSERT INTO users (id, full_name, email, password_hash, role, timezone, email_verified_at)
+     VALUES (?, ?, ?, ?, 'ADMIN', 'UTC', now())`,
     id('usr'),
     'Programme Administrator',
     config.admin.email,

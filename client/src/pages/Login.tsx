@@ -1,19 +1,32 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { Button, Callout, Field, PasswordInput, TextInput } from '../components/ui';
 import { AuthAside, AuthFooterNote } from '../components/AuthAside';
+import { useResendConfirmation } from '../components/ConfirmEmail';
+
+const VERIFIED_NOTICES: Record<string, { tone: 'success' | 'warning'; text: string }> = {
+  '1': { tone: 'success', text: 'Your email is confirmed. Sign in to start studying.' },
+  expired: {
+    tone: 'warning',
+    text: 'That confirmation link has expired or was already used. Sign in and we will offer a new one.',
+  },
+};
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
+  const [params] = useSearchParams();
+  const notice = VERIFIED_NOTICES[params.get('verified') ?? ''];
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const confirmation = useResendConfirmation();
 
   const destination = (location.state as { from?: string } | null)?.from;
 
@@ -21,11 +34,13 @@ export default function Login() {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
+    setErrorCode(null);
     try {
       const user = await login(email.trim(), password);
       navigate(destination ?? (user.role === 'ADMIN' ? '/admin' : '/app'), { replace: true });
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'Sign in failed. Try again.');
+      setErrorCode(caught instanceof ApiError ? caught.code : null);
     } finally {
       setSubmitting(false);
     }
@@ -39,9 +54,35 @@ export default function Login() {
           Sign in to continue your course, or start the chapter your schedule has queued up.
         </p>
 
+        {notice && !error ? (
+          <div className="mt-6">
+            <Callout tone={notice.tone}>{notice.text}</Callout>
+          </div>
+        ) : null}
+
         {error ? (
           <div className="mt-6">
-            <Callout tone="danger">{error}</Callout>
+            <Callout tone={errorCode === 'EMAIL_UNVERIFIED' ? 'warning' : 'danger'}>
+              {error}
+              {errorCode === 'EMAIL_UNVERIFIED' ? (
+                <>
+                  <br />
+                  <button
+                    type="button"
+                    className="confirm-inline"
+                    disabled={confirmation.sending || confirmation.wait > 0}
+                    onClick={() => confirmation.resend(email.trim())}
+                  >
+                    {confirmation.wait > 0 ? `Send again in ${confirmation.wait}s` : 'Send me a new link'}
+                  </button>
+                </>
+              ) : null}
+            </Callout>
+            {confirmation.message ? (
+              <p className={`confirm-message ${confirmation.failed ? 'is-error' : ''}`} role="status">
+                {confirmation.message}
+              </p>
+            ) : null}
           </div>
         ) : null}
 
@@ -53,7 +94,7 @@ export default function Login() {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               autoComplete="email"
-              placeholder="you@example.com"
+              placeholder="you@gmail.com"
               required
             />
           </Field>

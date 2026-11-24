@@ -18,8 +18,9 @@ apply → admitted → account → study chapter → exam ≥ pass mark
 
 | Capability | How it works |
 |---|---|
-| **Application and admission** | A prospective learner applies with a track, level, and weekly commitment. Applications meeting the published criteria are admitted automatically with a one-time access code; the rest are held for a human reviewer. |
+| **Application and admission** | A prospective learner applies with a **Gmail address**, a track, level, and weekly commitment. Applications meeting the published criteria are admitted automatically with a one-time access code; the rest are held for a human reviewer. |
 | **Account creation** | Registration is closed to the public — only an approved access code creates an account. New accounts are auto-enrolled in their track's entry course and given a starting study schedule. |
+| **Gmail only, confirmed by email** | After the account is made, a confirmation link is emailed to the learner's Gmail; they can sign in only once they open it (the link works once and lasts 24 hours, and they can ask for a new one from the sign-in page). An address that is not Gmail can sign in only when an administrator approved it or added the person. Administrators are always let in. The rule is checked at sign-in, on every token refresh and on every request, so withdrawing an approval ends access at once. |
 | **Study gate** | A chapter's exam stays locked until a minimum dwell time has actually elapsed. The clock is recorded server-side, so reloading or closing the tab does not shorten it. |
 | **Exams** | Each chapter carries a question bank, presented in a shuffled order inside a fixed time window. Answers are graded on the server; the client never receives a correct answer before submission. Repeated failures trigger a cool-down that pushes the learner back to the material. |
 | **Timed viewing reward** | Passing grants a reward session worth the chapter's reward minutes. The expiry is fixed when the learner picks a film and is never extended. Every read of the session re-checks it, so an elapsed entitlement cannot be resumed. |
@@ -84,6 +85,9 @@ npm run db:setup          # apply the schema, then seed the catalog
 npm run dev               # API on :4000, client on :5173
 ```
 
+Without `GMAIL_USER` / `GMAIL_APP_PASSWORD`, development prints each email
+(including the confirmation link) in the server console instead of sending it.
+
 For a free hosted database, Neon Free currently includes up to 100 projects per
 organization. Create a Neon project, copy its pooled connection string into
 `DATABASE_URL`, and keep `DATABASE_SSL=true`. Free-tier limits include 1 GB of
@@ -106,7 +110,14 @@ card while numbers count up and charts draw themselves.
   and its sources. The figures come from `GET /api/admin/stats`.
 - **Applications** (`/admin/applications`) shows each applicant as a review tile
   with their track, weekly hours, experience, country and motivation, an optional
-  note, and Decline / Approve buttons; approving shows the access code.
+  note, and Decline / Approve buttons; approving shows the access code. Older
+  applications that are not Gmail are marked, and approving one lets that address
+  create its account.
+- **Learners** (`/admin/learners`) lists every account with whether its email
+  may sign in: Gmail and confirmed, waiting to confirm, approved by an admin, or
+  not Gmail and blocked. Approve an address, withdraw an approval, or mark an
+  email as confirmed by hand. **Add a learner** approves someone with any address
+  and gives you their access code and account link to send them.
 - **Films** and **Learning** keep their existing tools on the same glass.
 
 ### Admin-created learning courses
@@ -170,6 +181,10 @@ Required environment variables:
 | `JWT_ACCESS_SECRET` | 32+ random bytes, hex. Required in production. |
 | `JWT_REFRESH_SECRET` | As above, and different from the access secret. |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Required valid admin email and strong password. The account is created by the first seed. |
+| `GMAIL_USER` | The Gmail address that sends confirmation emails. Required in production, or new accounts are refused. |
+| `GMAIL_APP_PASSWORD` | A Google **app password** for that account (not its normal password): turn on 2-Step Verification, then create one at <https://myaccount.google.com/apppasswords>. Spaces are ignored. |
+| `MAIL_FROM_NAME` | Optional sender name, `StudyReel` by default. |
+| `APP_URL` | The site's public address for links in emails, e.g. `https://studyreel.vercel.app`. Vercel and Render fill in a default. |
 | `TMDB_API_KEY` | Optional; enables the TMDB metadata provider. |
 | `DEEPSEEK_API_KEY` | Optional; enables AI-drafted admin exam questions. |
 
@@ -286,7 +301,9 @@ characters in the product, and no sparkle, wand, robot, or similar motifs.
 |---|---|---|
 | `POST` | `/api/applications` | Submit an application; screened on arrival |
 | `GET` | `/api/applications/status` | Look up by reference or email |
-| `POST` | `/api/auth/register` | Redeem an access code and create the account |
+| `POST` | `/api/auth/register` | Redeem an access code and create the account; a Gmail account gets a confirmation email |
+| `POST` | `/api/auth/verify` | Use a confirmation link |
+| `POST` | `/api/auth/verification` | Send a new confirmation link |
 | `POST` | `/api/auth/login` · `/refresh` · `/logout` | Session lifecycle |
 | `GET` | `/api/learning/courses` · `/courses/:slug` | Catalog, with progress when signed in |
 | `POST` | `/api/learning/courses/:slug/enroll` | Enroll and initialise chapter progress |
@@ -301,6 +318,9 @@ characters in the product, and no sparkle, wand, robot, or similar motifs.
 | `POST` | `/api/movies/:id/decision` | Watch later, decline, or watched |
 | `GET` | `/api/schedule` · `/alerts` | Weekly sessions and due reminders |
 | `GET` | `/api/dashboard` | Everything the home screen needs, in one call |
+| `GET` | `/api/admin/learners` | Accounts and whether their email may sign in |
+| `PATCH` | `/api/admin/learners/:id` | Approve or withdraw an address, or mark it confirmed |
+| `POST` | `/api/admin/learners` | Add someone directly and get their access code |
 | `GET` | `/api/health` · `/api/ready` | Liveness and readiness |
 
 ---
@@ -318,5 +338,8 @@ characters in the product, and no sparkle, wand, robot, or similar motifs.
   `dangerouslySetInnerHTML`.
 - Rate limits apply globally, and more tightly on authentication and application
   submission.
+- Confirmation links carry a random token; only its SHA-256 hash is stored, it
+  works once and expires after 24 hours. Asking for a new link answers the same
+  whether or not the account exists, and waits a minute between sends.
 - Secrets are read from the environment and validated at startup; the server
   refuses to boot in production without them.

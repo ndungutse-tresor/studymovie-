@@ -198,6 +198,11 @@ export default function AdminApplications() {
                     <span className="ga-chip">{application.experienceLevel.toLowerCase()}</span>
                     {application.country ? <span className="ga-chip"><GaIcon name="globe" />{application.country}</span> : null}
                     <span className="ga-chip">Applied {ago(application.submittedAt)}</span>
+                    {application.gmail === false ? (
+                      <span className={`ga-chip ${application.adminApproved ? 'is-green' : 'is-amber'}`}>
+                        {application.adminApproved ? 'Not Gmail · approved by you' : 'Not Gmail'}
+                      </span>
+                    ) : null}
                   </div>
                   <p className={open[application.id] ? 'ga-motivation' : 'ga-motivation ga-clamp'}>{application.motivation}</p>
                   {application.motivation.length > 140 ? (
@@ -229,6 +234,13 @@ export default function AdminApplications() {
                     </button>
                     <button className="ga-button is-dark" type="button" disabled={busyId !== null} onClick={() => void decide(application, 'APPROVED')}>
                       <GaIcon name="check" /> {busy ? 'Saving…' : 'Approve'}
+                    </button>
+                  </footer>
+                ) : application.status === 'APPROVED' && application.gmail === false && !application.adminApproved ? (
+                  <footer className="ga-tile-actions is-stacked">
+                    <p className="ga-note">Not Gmail: they cannot create the account until you approve the address.</p>
+                    <button className="ga-button is-dark" type="button" disabled={busyId !== null} onClick={() => void decide(application, 'APPROVED')}>
+                      <GaIcon name="check" /> {busy ? 'Saving…' : 'Approve address'}
                     </button>
                   </footer>
                 ) : null}

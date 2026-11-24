@@ -8,7 +8,7 @@ export interface AdminStats {
     tracks: { track: string; label: string; count: number }[];
     recent: { id: string; fullName: string; email: string; trackLabel: string; status: string; weeklyHours: number; submittedAt: string }[];
   };
-  learners: { total: number; active: number; thisMonth: number; lastMonth: number };
+  learners: { total: number; active: number; thisMonth: number; lastMonth: number; needsApproval: number };
   learning: { courses: number; chapters: number; enrollments: number; completed: number; examsTaken: number; examsPassed: number };
   rewards: { minutesGranted: number; minutesWatched: number; activeSessions: number; sessions: number };
   films: {

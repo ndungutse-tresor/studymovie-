@@ -28,6 +28,10 @@ const STATUS: Record<string, [string, string]> = {
 
 const ACTIONS: Record<string, string> = {
   'account.created': 'Created a learner account',
+  'learner.added': 'Added a learner',
+  'email.approved': 'Approved an email address',
+  'email.withdrawn': 'Withdrew an email approval',
+  'email.confirmed': 'Marked an email as confirmed',
 };
 
 function when(value: string) {

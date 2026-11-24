@@ -1,5 +1,6 @@
 import { one, nowIso, run } from '../db/index.js';
 import { accessCode, id } from '../lib/ids.js';
+import { GMAIL_ONLY_MESSAGE, isGmail } from '../lib/email-access.js';
 import { HttpError } from '../lib/http-error.js';
 
 export const TRACKS = [
@@ -84,6 +85,7 @@ export interface ApplicationRecord {
   access_code: string | null;
   review_note: string | null;
   reviewed_at: string | null;
+  admin_approved_at: string | null;
   created_at: string;
 }
 
@@ -121,6 +123,10 @@ export function screen(input: ApplicationInput): ReviewOutcome {
 }
 
 export async function submitApplication(input: ApplicationInput): Promise<ApplicationRecord> {
+  if (!isGmail(input.email)) {
+    throw new HttpError(400, 'EMAIL_NOT_GMAIL', GMAIL_ONLY_MESSAGE);
+  }
+
   const existing = await one<ApplicationRecord>(
     'SELECT * FROM applications WHERE email = ?',
     input.email.toLowerCase(),
@@ -188,14 +194,18 @@ export async function decideApplication(
     throw HttpError.conflict('This application has already been converted into an account.');
   }
 
+  // An administrator's approval is what lets an address that is not Gmail in.
   await run(
     `UPDATE applications
-        SET status = ?, review_note = ?, reviewed_at = ?, access_code = COALESCE(access_code, ?)
+        SET status = ?, review_note = ?, reviewed_at = ?, access_code = COALESCE(access_code, ?),
+            admin_approved_at = ?
       WHERE id = ?`,
     decision,
-    note,
+    // Approving an address on an already approved application keeps its note.
+    !note && decision === application.status ? application.review_note : note,
     nowIso(),
     decision === 'APPROVED' ? accessCode() : null,
+    decision === 'APPROVED' ? nowIso() : null,
     applicationId,
   );
 
@@ -217,5 +227,50 @@ export function publicApplication(record: ApplicationRecord) {
     accessCode: record.status === 'APPROVED' ? record.access_code : null,
     submittedAt: record.created_at,
     reviewedAt: record.reviewed_at,
+    gmail: isGmail(record.email),
+    adminApproved: Boolean(record.admin_approved_at),
   };
+}
+
+/**
+ * An administrator adds someone directly: the application is approved on the
+ * spot, so the person can create the account with the access code even when
+ * the address is not Gmail.
+ */
+export async function addApprovedApplication(
+  input: Omit<ApplicationInput, 'motivation'> & { note?: string },
+): Promise<ApplicationRecord> {
+  const email = input.email.trim().toLowerCase();
+  const existing = await one<ApplicationRecord>('SELECT * FROM applications WHERE email = ?', email);
+  if (existing) {
+    throw HttpError.conflict(
+      existing.status === 'ENROLLED'
+        ? 'This person already has an account.'
+        : 'An application already exists for this address. Approve it from the list instead.',
+      { applicationId: existing.id, status: existing.status },
+    );
+  }
+
+  const applicationId = id('app');
+  const now = nowIso();
+  await run(
+    `INSERT INTO applications
+       (id, full_name, email, phone, country, track, experience_level, weekly_hours, motivation, status, access_code, review_note, reviewed_at, admin_approved_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED', ?, ?, ?, ?)`,
+    applicationId,
+    input.fullName.trim(),
+    email,
+    input.phone?.trim() || null,
+    input.country?.trim() || null,
+    input.track,
+    input.experienceLevel,
+    input.weeklyHours,
+    'Added by an administrator.',
+    accessCode(),
+    input.note?.trim() || 'Added by an administrator.',
+    now,
+    now,
+  );
+
+  return getApplication(applicationId);
 }

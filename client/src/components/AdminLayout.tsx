@@ -16,7 +16,13 @@ function ReelAdminShell() {
 
   const groups: ShellNavGroup[] = [
     { label: 'Dashboard', items: [{ href: '/admin', label: 'Overview', icon: 'home' }] },
-    { label: 'Admissions', items: [{ href: '/admin/applications', label: 'Applications', icon: 'inbox', count: pending }] },
+    {
+      label: 'Admissions',
+      items: [
+        { href: '/admin/applications', label: 'Applications', icon: 'inbox', count: pending },
+        { href: '/admin/learners', label: 'Learners', icon: 'users', count: stats?.learners.needsApproval ?? 0 },
+      ],
+    },
     {
       label: 'Content',
       items: [
@@ -29,6 +35,7 @@ function ReelAdminShell() {
 
   const searches: ShellSearch[] = [
     { label: 'Find applications matching', icon: 'inbox', href: (q) => `/admin/applications?q=${encodeURIComponent(q)}` },
+    { label: 'Find learners matching', icon: 'users', href: (q) => `/admin/learners?q=${encodeURIComponent(q)}` },
   ];
 
   return (
@@ -44,7 +51,7 @@ function ReelAdminShell() {
       }}
       site={{ href: '/', label: 'Open the StudyReel site' }}
       searches={searches}
-      searchPlaceholder="Search pages and applicants…"
+      searchPlaceholder="Search pages, applicants and learners…"
       onSignOut={async () => {
         await logout();
         navigate('/login', { replace: true });

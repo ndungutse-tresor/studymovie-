@@ -49,6 +49,38 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
 
 -- ---------------------------------------------------------------------------
+-- Email access. New accounts must use a Gmail address and confirm it from the
+-- link emailed to them. Any other address is let in only when an administrator
+-- approved it (or added the person). Administrators are always let in.
+-- ---------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = current_schema() AND table_name = 'users' AND column_name = 'email_verified_at'
+  ) THEN
+    ALTER TABLE users ADD COLUMN email_verified_at TIMESTAMPTZ;
+    -- Accounts made before confirmation existed count as confirmed, once. Their
+    -- address must still be Gmail, or approved, for them to sign in.
+    UPDATE users SET email_verified_at = created_at;
+  END IF;
+END $$;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_approved_at TIMESTAMPTZ;
+-- Set when an administrator approves an application or adds a learner, so an
+-- address that is not Gmail can still be used to create the account.
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS admin_approved_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS email_verifications (
+  token_hash  TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_email_verifications_user ON email_verifications(user_id, created_at DESC);
+-- Closed to Supabase's public Data API; the server owns the table.
+ALTER TABLE email_verifications ENABLE ROW LEVEL SECURITY;
+
+-- ---------------------------------------------------------------------------
 -- Catalog
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS courses (

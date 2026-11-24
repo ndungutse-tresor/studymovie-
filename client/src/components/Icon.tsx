@@ -33,6 +33,7 @@ export type IconName =
   | 'shield'
   | 'chart'
   | 'user'
+  | 'mail'
   | 'menu'
   | 'document'
   | 'clipboard'
@@ -159,6 +160,12 @@ const PATHS: Record<IconName, JSX.Element> = {
     <>
       <circle cx="12" cy="8.5" r="3.8" />
       <path d="M4.8 20a7.4 7.4 0 0 1 14.4 0" />
+    </>
+  ),
+  mail: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m4 7 8 6 8-6" />
     </>
   ),
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
